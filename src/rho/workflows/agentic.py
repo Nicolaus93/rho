@@ -8,12 +8,16 @@ from typing import cast
 from temporalio import workflow
 from temporalio.exceptions import ApplicationError
 
+from ..activities.llm import LLMActivityInput, LLMActivityOutput
 from ..constants import (
     ITEM_TYPE_ASSISTANT_MESSAGE,
+    ITEM_TYPE_FUNCTION_CALL,
+    ITEM_TYPE_FUNCTION_CALL_OUTPUT,
     ITEM_TYPE_TURN_COMPLETE,
     ITEM_TYPE_TURN_STARTED,
     ITEM_TYPE_USER_MESSAGE,
     PHASE_LLM_CALLING,
+    PHASE_TOOL_EXECUTING,
     PHASE_WAITING_FOR_INPUT,
     QUERY_GET_CONVERSATION_ITEMS,
     QUERY_GET_TURN_STATUS,
@@ -28,6 +32,7 @@ from ..models import (
     AgenticWorkflowState,
     AgentInputSignal,
     ConversationItem,
+    FunctionCallOutputPayload,
     InterruptRequest,
     InterruptResponse,
     ModelConfig,
@@ -35,12 +40,13 @@ from ..models import (
     ShutdownResponse,
     StateUpdateRequest,
     StateUpdateResponse,
-    TurnReplyActivityInput,
+    ToolSpec,
     TurnStatus,
     UserInput,
     WorkflowInput,
     WorkflowResult,
 )
+from ..tools import ToolsExecutor, build_builtin_tool_specs
 
 
 @workflow.defn(name="AgenticWorkflow")
@@ -50,6 +56,9 @@ class AgenticWorkflow:
         self._config_context_window = 0
         self._history: list[ConversationItem] = []
         self._model_config = ModelConfig()
+        self._tool_specs: list[ToolSpec] = []
+        self._cwd: str = ""
+        self._task_queue: str = ""
         self._pending_turns: list[tuple[str, str]] = []
         self._turn_counter = 0
         self._turns_in_run = 0
@@ -202,21 +211,46 @@ class AgenticWorkflow:
         self._state_version += 1
         interrupt_note = self._interrupt_note
         self._interrupt_note = ""
+        last_output: LLMActivityOutput | None = None
         try:
-            reply = cast(
-                str,
-                await workflow.execute_activity(
-                    "GenerateTurnReply",
-                    TurnReplyActivityInput(
-                        turn_id=turn_id,
-                        message=message,
-                        history=[replace(item) for item in self._history],
-                        model_config=self._model_config,
-                        interrupt_note=interrupt_note,
-                    ),
-                    start_to_close_timeout=timedelta(seconds=30),
-                ),
+            tool_executor = ToolsExecutor(
+                specs=list(self._tool_specs),
+                cwd=self._cwd,
+                task_queue=self._task_queue,
             )
+            for _ in range(20):
+                last_output = cast(
+                    LLMActivityOutput,
+                    await workflow.execute_activity(
+                        "ExecuteLLMCall",
+                        LLMActivityInput(
+                            history=[replace(item) for item in self._history],
+                            model_config=self._model_config,
+                            tool_specs=list(self._tool_specs),
+                        ),
+                        result_type=LLMActivityOutput,
+                        start_to_close_timeout=timedelta(seconds=60),
+                    ),
+                )
+                function_calls = [item for item in last_output.items if item.type == ITEM_TYPE_FUNCTION_CALL]
+                for item in last_output.items:
+                    self._append_item(replace(item, turn_id=turn_id))
+                if not function_calls:
+                    break
+                self._phase = PHASE_TOOL_EXECUTING
+                self._state_version += 1
+                tool_results = await tool_executor.execute_parallel(function_calls)
+                for result in tool_results:
+                    self._append_item(
+                        ConversationItem(
+                            type=ITEM_TYPE_FUNCTION_CALL_OUTPUT,
+                            call_id=result.call_id,
+                            output=FunctionCallOutputPayload(content=result.content, success=result.success),
+                            turn_id=turn_id,
+                        )
+                    )
+                self._phase = PHASE_LLM_CALLING
+                self._state_version += 1
         except Exception as error:
             self._append_item(
                 ConversationItem(
@@ -230,18 +264,30 @@ class AgenticWorkflow:
             self._state_version += 1
             self._turns_in_run += 1
             return
-        self._append_item(ConversationItem(type=ITEM_TYPE_ASSISTANT_MESSAGE, content=reply, turn_id=turn_id))
+        if interrupt_note:
+            for i, item in enumerate(self._history):
+                if item.turn_id == turn_id and item.type == ITEM_TYPE_ASSISTANT_MESSAGE:
+                    self._history[i] = replace(item, content=f"{interrupt_note} {item.content}".strip())
+                    self._state_version += 1
+                    break
         self._append_item(ConversationItem(type=ITEM_TYPE_TURN_COMPLETE, turn_id=turn_id))
         self._phase = PHASE_WAITING_FOR_INPUT
         self._state_version += 1
         self._turns_in_run += 1
-        self._total_tokens += max(1, len(reply.split()))
+        if last_output is not None:
+            self._total_tokens += last_output.token_usage.total_tokens or max(
+                1, sum(len(item.content.split()) for item in last_output.items if item.content)
+            )
 
     @workflow.run
     async def run(self, input: WorkflowInput) -> WorkflowResult:
         self._conversation_id = input.conversation_id
         self._config_context_window = input.config.model.context_window
         self._model_config = input.config.model
+        self._cwd = input.config.cwd
+        self._task_queue = input.config.session_task_queue
+        enabled = set(input.config.tools.enabled_tools)
+        self._tool_specs = [s for s in build_builtin_tool_specs() if s.name in enabled]
         if input.continued_state is not None:
             self._history = [replace(item) for item in input.continued_state.history]
             self._turn_counter = input.continued_state.turn_counter

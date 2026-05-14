@@ -10,8 +10,7 @@ from ..llm import (
     MultiProviderLLMClient,
     create_default_llm_client,
 )
-from ..models import ConversationItem, ModelConfig, TokenUsage, TurnReplyActivityInput
-from ..tools import ToolSpec
+from ..models import ConversationItem, ModelConfig, TokenUsage, ToolSpec, TurnReplyActivityInput
 
 
 class LLMActivityError(RuntimeError):
@@ -73,6 +72,7 @@ class LLMActivities:
             LLMRequest(
                 history=input.history,
                 model_config=input.model_config,
+                tool_specs=input.tool_specs,
             )
         )
         reply = next(

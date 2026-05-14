@@ -11,14 +11,125 @@ from urllib import request as urllib_request
 
 from .models import (
     FINISH_REASON_STOP,
+    FINISH_REASON_TOOL_CALL,
     ConversationItem,
     ModelConfig,
     TokenUsage,
+    ToolSpec,
     detect_provider,
 )
-from .tools import ToolSpec
 
 LOGGER = logging.getLogger(__name__)
+
+_TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
+    "shell": {
+        "name": "shell",
+        "description": "Execute a shell command and return its output.",
+        "parameters": {
+            "type": "object",
+            "properties": {"command": {"type": "string"}},
+            "required": ["command"],
+        },
+    },
+    "shell_command": {
+        "name": "shell_command",
+        "description": "Execute a shell command and return its output.",
+        "parameters": {
+            "type": "object",
+            "properties": {"command": {"type": "string"}},
+            "required": ["command"],
+        },
+    },
+    "read_file": {
+        "name": "read_file",
+        "description": "Read the contents of a file, with optional line-range control.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "Path to the file."},
+                "offset": {"type": "integer", "description": "First line to read (1-based)."},
+                "limit": {"type": "integer", "description": "Maximum number of lines to return."},
+            },
+            "required": ["file_path"],
+        },
+    },
+    "write_file": {
+        "name": "write_file",
+        "description": "Write content to a file, creating it if it does not exist.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "Path to the file."},
+                "content": {"type": "string", "description": "Content to write."},
+            },
+            "required": ["file_path", "content"],
+        },
+    },
+    "list_dir": {
+        "name": "list_dir",
+        "description": "List the contents of a directory.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Directory path. Defaults to the working directory."},
+                "depth": {"type": "integer", "description": "Recursion depth. Defaults to 1."},
+            },
+        },
+    },
+    "grep_files": {
+        "name": "grep_files",
+        "description": "Search for a regex pattern in files using ripgrep.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string", "description": "Regex pattern to search for."},
+                "path": {"type": "string", "description": "Directory to search. Defaults to the working directory."},
+                "output_mode": {
+                    "type": "string",
+                    "enum": ["files_with_matches", "content", "count"],
+                    "description": "Output format. Defaults to files_with_matches.",
+                },
+                "include": {"type": "string", "description": "Glob to filter files, e.g. '*.py'."},
+            },
+            "required": ["pattern"],
+        },
+    },
+    "exec_command": {
+        "name": "exec_command",
+        "description": "Execute a command directly (no shell) and return its output.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "description": "Command to run, as a string or array of arguments.",
+                    "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                },
+            },
+            "required": ["command"],
+        },
+    },
+    "write_stdin": {
+        "name": "write_stdin",
+        "description": "Write data to the stdin of a running background process.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "process_id": {"type": "string", "description": "ID of the background process."},
+                "content": {"type": "string", "description": "Data to write to stdin."},
+            },
+            "required": ["process_id"],
+        },
+    },
+}
+
+
+def _tool_specs_to_openai_tools(specs: list[ToolSpec]) -> list[dict[str, Any]]:
+    tools = []
+    for spec in specs:
+        schema = _TOOL_SCHEMAS.get(spec.name)
+        if schema:
+            tools.append({"type": "function", "function": schema})
+    return tools
 
 
 @dataclass
@@ -64,15 +175,30 @@ def detect_provider_from_model(model: str) -> str:
     return detect_provider(model)
 
 
-def _history_to_messages(history: list[ConversationItem]) -> list[dict[str, str]]:
-    messages: list[dict[str, str]] = []
+def _history_to_messages(history: list[ConversationItem]) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
     for item in history:
         if item.type == "assistant_message":
             messages.append({"role": "assistant", "content": item.content})
         elif item.type == "user_message":
             messages.append({"role": "user", "content": item.content})
-        elif item.type == "function_call_output" and item.output is not None:
-            messages.append({"role": "tool", "content": item.output.content})
+        elif item.type == "function_call":
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": item.call_id,
+                            "type": "function",
+                            "function": {"name": item.name, "arguments": item.arguments},
+                        }
+                    ],
+                }
+            )
+        elif item.type == "function_call_output":
+            content = item.output.content if item.output else item.content
+            messages.append({"role": "tool", "tool_call_id": item.call_id, "content": content})
     return messages
 
 
@@ -340,18 +466,36 @@ class OpenAIClient(BaseHTTPProviderClient):
         if isinstance(choices, list) and choices:
             first_choice = choices[0] if isinstance(choices[0], dict) else {}
             message = first_choice.get("message") if isinstance(first_choice, dict) else None
+            finish_reason = str(first_choice.get("finish_reason") or payload.get("finish_reason") or FINISH_REASON_STOP)
+            items: list[ConversationItem] = []
             text = ""
             if isinstance(message, dict):
                 text = self._chat_content_to_text(message.get("content"))
-            if not text:
-                text = self._chat_content_to_text(first_choice.get("text"))
-            items = [ConversationItem(type="assistant_message", content=text)] if text else []
+                tool_calls = message.get("tool_calls")
+                if isinstance(tool_calls, list):
+                    for tc in tool_calls:
+                        if not isinstance(tc, dict):
+                            continue
+                        fn = tc.get("function") or {}
+                        items.append(
+                            ConversationItem(
+                                type="function_call",
+                                call_id=str(tc.get("id") or ""),
+                                name=str(fn.get("name") or ""),
+                                arguments=str(fn.get("arguments") or ""),
+                            )
+                        )
+            if not items:
+                if not text:
+                    text = self._chat_content_to_text(first_choice.get("text"))
+                if text:
+                    items = [ConversationItem(type="assistant_message", content=text)]
             usage = self._parse_usage(payload.get("usage"), fallback_text=text)
+            if finish_reason == "tool_calls" and items:
+                finish_reason = FINISH_REASON_TOOL_CALL
             return LLMResponse(
                 items=items,
-                finish_reason=str(
-                    first_choice.get("finish_reason") or payload.get("finish_reason") or FINISH_REASON_STOP
-                ),
+                finish_reason=finish_reason,
                 token_usage=usage,
                 response_id=str(payload.get("id") or payload.get("response_id") or ""),
             )
@@ -404,12 +548,17 @@ class OpenAIClient(BaseHTTPProviderClient):
         self._ensure_chat_completions_compatible(request)
         config = request.model_config.normalize()
         messages = self._chat_completions_messages(request)
-        return {
+        payload: dict[str, Any] = {
             "model": config.model,
             "messages": messages,
             "temperature": config.temperature,
             "max_tokens": config.max_tokens,
         }
+        tools = _tool_specs_to_openai_tools(request.tool_specs)
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+        return payload
 
     def _chat_completions_messages(self, request: LLMRequest) -> list[dict[str, str]]:
         messages = _history_to_messages(request.history)
@@ -428,8 +577,6 @@ class OpenAIClient(BaseHTTPProviderClient):
         return "\n\n".join(chunks)
 
     def _ensure_chat_completions_compatible(self, request: LLMRequest) -> None:
-        if request.tool_specs:
-            raise ValueError("OpenAI chat completions mode does not support tool_specs in this client yet")
         if request.previous_response_id:
             raise ValueError("OpenAI chat completions mode does not support previous_response_id")
         if request.web_search_mode:

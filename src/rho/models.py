@@ -5,6 +5,24 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+
+@dataclass(frozen=True)
+class ToolRetryPolicy:
+    max_attempts: int = 0
+    non_retryable: bool = False
+
+
+RETRY_NONE = ToolRetryPolicy(non_retryable=True)
+RETRY_DEFAULT = ToolRetryPolicy(max_attempts=3)
+
+
+@dataclass(frozen=True)
+class ToolSpec:
+    name: str
+    default_timeout_ms: int = 0
+    retry_policy: ToolRetryPolicy | None = None
+
+
 REASONING_EFFORT_NONE = "none"
 REASONING_EFFORT_MINIMAL = "minimal"
 REASONING_EFFORT_LOW = "low"
@@ -467,6 +485,7 @@ class TurnReplyActivityInput:
     message: str
     history: list[ConversationItem] = field(default_factory=list)
     model_config: ModelConfig = field(default_factory=ModelConfig)
+    tool_specs: list[ToolSpec] = field(default_factory=list)
     interrupt_note: str = ""
 
 

@@ -1,33 +1,22 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
-from .models import ConversationItem, ToolActivityInput, ToolActivityOutput
+from .models import (
+    RETRY_DEFAULT,
+    RETRY_NONE,
+    ConversationItem,
+    ToolActivityInput,
+    ToolActivityOutput,
+    ToolSpec,
+)
 
 DEFAULT_TOOL_TIMEOUT_MS = 120_000
-
-
-@dataclass(frozen=True)
-class ToolRetryPolicy:
-    max_attempts: int = 0
-    non_retryable: bool = False
-
-
-RETRY_NONE = ToolRetryPolicy(non_retryable=True)
-RETRY_DEFAULT = ToolRetryPolicy(max_attempts=3)
-
-
-@dataclass(frozen=True)
-class ToolSpec:
-    name: str
-    default_timeout_ms: int = 0
-    retry_policy: ToolRetryPolicy | None = None
 
 
 def build_builtin_tool_specs() -> list[ToolSpec]:
@@ -138,7 +127,9 @@ class ToolsExecutor:
             if self._task_queue:
                 kwargs["task_queue"] = self._task_queue
             try:
-                return await workflow.execute_activity("ExecuteTool", activity_input, **kwargs)
+                return await workflow.execute_activity(
+                    "ExecuteTool", activity_input, result_type=ToolActivityOutput, **kwargs
+                )
             except Exception as exc:  # pragma: no cover - exercised in runtime, not unit tests
                 return tool_activity_error_to_output(call.call_id, exc)
 
