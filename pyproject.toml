@@ -21,7 +21,7 @@ dev = [
 
 [project.scripts]
 rho = "rho.runtime.worker_main:main"
-temporal-agent-harness-client = "rho.runtime.client_main:main"
+rho-client = "rho.runtime.client_main:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -1,13 +1,13 @@
 # Python runtime
 
-This repo now includes a phase-1 Python port under `src/rho`.
+This repo includes a Python implementation under `src/rho`.
 
 ## Current status
 
 The Python side currently provides:
 
-- Temporal worker entry point
-- Temporal client CLI for starting and interacting with workflows
+- Worker + workflow entry point (`rho`)
+- Low-level workflow CLI (`rho-client`)
 - Core workflow/activity scaffolding
 - Phase-1 tool runtime for file and command tools
 
@@ -53,67 +53,23 @@ TLS env vars are also supported:
 - `TEMPORAL_TLS_SERVER_ROOT_CA_CERT`
 - `TEMPORAL_TLS_SERVER_NAME`
 
-## Start the Python worker
+## Start rho
 
-In a second terminal:
-
-```bash
-uv run temporal-agent-harness-worker
-```
-
-You can also run it as a module:
+A single command starts the worker, launches the harness workflow, and opens the interactive TUI:
 
 ```bash
-uv run python -m rho.runtime.worker_main
+uv run rho
 ```
 
-## Start a workflow
-
-In a third terminal:
+Optional flags:
 
 ```bash
-uv run rho --provider openai --model llm "Hello"
+uv run rho --provider openai --model gpt-4o "Hello"
+uv run rho --cwd /path/to/project
+uv run rho --harness-id my-harness
 ```
 
-If you want to use the lower-level workflow client directly, the compatibility command still works:
-
-```bash
-uv run temporal-agent-harness-client start --message "List files in the current directory"
-```
-
-That prints JSON like:
-
-```json
-{"workflow_id":"py-agent-1234abcd","run_id":"..."}
-```
-
-Save the `workflow_id` and use it in the commands below.
-
-## Interact with a running workflow
-
-Send another user message:
-
-```bash
-uv run temporal-agent-harness-client send --workflow-id py-agent-1234abcd --message "Read README.md"
-```
-
-Read conversation history:
-
-```bash
-uv run temporal-agent-harness-client history --workflow-id py-agent-1234abcd
-```
-
-Interrupt the workflow:
-
-```bash
-uv run temporal-agent-harness-client interrupt --workflow-id py-agent-1234abcd
-```
-
-Request shutdown:
-
-```bash
-uv run temporal-agent-harness-client end --workflow-id py-agent-1234abcd --reason "done"
-```
+On exit (`ctrl+c` or closing the TUI), `rho` sends a shutdown signal to all open workflows so they complete cleanly.
 
 ## Notes about models and API keys
 
@@ -122,67 +78,100 @@ The Python worker includes LLM activity implementations for OpenAI and Anthropic
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
 
-But the current phase-1 workflow path is still limited and is **not** yet full Go-style agent parity. So for basic local workflow bring-up, you may not need an API key depending on what path you exercise.
-
 ### Using a standard OpenAI-compatible `/chat/completions` server
 
-By default, the OpenAI client in the worker uses the newer `/responses` endpoint.
-If your local or remote provider exposes the more common OpenAI-compatible `POST /chat/completions` API instead, set:
+By default, the OpenAI client uses the newer `/responses` endpoint.
+If your provider exposes the more common `POST /chat/completions` API instead, set:
 
 ```bash
 export OPENAI_BASE_URL="http://localhost:1234/v1"
 export OPENAI_API_MODE="chat_completions"
 ```
 
-If the server does not require authentication, you can leave `OPENAI_API_KEY` unset.
-If it does require auth, also set:
+Then start rho normally:
 
 ```bash
-export OPENAI_API_KEY="your-token-here"
+uv run rho --provider openai --model your-model-name
 ```
 
-Then start the worker and use `rho` normally:
-
-```bash
-uv run temporal-agent-harness-worker
-uv run rho "List files in the current directory"
-```
-
-The worker reads these values at startup time.
-If you change `OPENAI_BASE_URL`, `OPENAI_API_MODE`, or `OPENAI_API_KEY`, restart the worker so it picks up the new configuration.
-
-To avoid stale shell state, you can also start the worker with the values inline:
+To avoid stale shell state, you can also pass the values inline:
 
 ```bash
 OPENAI_BASE_URL="http://localhost:1234/v1" \
 OPENAI_API_MODE="chat_completions" \
-uv run temporal-agent-harness-worker
+uv run rho --provider openai --model your-model-name
 ```
 
-For a public Modal vLLM deployment, the working shape looks like this:
+For a public Modal vLLM deployment:
 
 ```bash
 OPENAI_BASE_URL="https://your-workspace--your-app-serve.modal.run/v1" \
 OPENAI_API_MODE="chat_completions" \
-uv run temporal-agent-harness-worker
-
-uv run rho --provider openai --model llm "Hello"
+uv run rho --provider openai --model your-model-name
 ```
 
 Notes:
 
 - `OPENAI_BASE_URL` must include the `/v1` prefix
-- if you do not pass `--model`, the harness may still default to `gpt-4o-mini`
-- many local or self-hosted OpenAI-compatible servers do not require `OPENAI_API_KEY`; if yours does, set it before starting the worker
+- if you do not pass `--model`, the harness defaults to `gpt-4o-mini`
+- many local or self-hosted servers do not require `OPENAI_API_KEY`; if yours does, set it before starting
+- you can also set `OPENAI_API_MODE="auto"` to try `/responses` first and fall back to `/chat/completions` for simple requests; `chat_completions` is the safest setting for local providers
 
-You can also use:
+## rho-client
+
+`rho-client` is a low-level CLI that talks directly to a running `AgenticWorkflow` over the Temporal API. It is useful when you want to script interactions with a workflow, inspect conversation state, or control a workflow that was started by a separate `rho` process (e.g. in a CI pipeline or a headless environment where the TUI is not available).
+
+### Why it exists
+
+`rho` bundles the worker and the TUI into one process. `rho-client` does neither — it only acts as a Temporal client. This means you can use it to interact with any `AgenticWorkflow` that a worker elsewhere is keeping alive, without starting your own worker.
+
+### Commands
+
+**Start a new workflow** (requires a running worker):
 
 ```bash
-export OPENAI_API_MODE="auto"
+uv run rho-client start --message "List files in the current directory"
 ```
 
-In `auto` mode, the client tries `/responses` first and only falls back to `/chat/completions` for simple text requests when the responses endpoint is clearly unsupported.
-If you want predictable behavior with local providers, `chat_completions` is the safest setting.
+Prints JSON with the workflow ID:
+
+```json
+{"workflow_id": "py-agent-1234abcd", "run_id": "..."}
+```
+
+Save the `workflow_id` and pass it to the commands below.
+
+**Send a follow-up message:**
+
+```bash
+uv run rho-client send --workflow-id py-agent-1234abcd --message "Read README.md"
+```
+
+**Read conversation history:**
+
+```bash
+uv run rho-client history --workflow-id py-agent-1234abcd
+```
+
+**Interrupt the current turn:**
+
+```bash
+uv run rho-client interrupt --workflow-id py-agent-1234abcd
+```
+
+**Shut down the workflow:**
+
+```bash
+uv run rho-client end --workflow-id py-agent-1234abcd --reason "done"
+```
+
+### Connection flags
+
+All `rho-client` subcommands accept `--temporal-host` and `--namespace` to override the defaults:
+
+```bash
+uv run rho-client --temporal-host my-cluster:7233 --namespace prod start --message "Hello"
+```
 
 ## Run tests
 

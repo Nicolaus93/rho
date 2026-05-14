@@ -55,7 +55,7 @@ async def _cmd_end(args: argparse.Namespace) -> None:
 
 
 async def _main() -> None:
-    parser = argparse.ArgumentParser(prog="temporal-agent-harness-client")
+    parser = argparse.ArgumentParser(prog="rho-client")
     parser.add_argument("--temporal-host", default="")
     parser.add_argument("--namespace", default="")
     subparsers = parser.add_subparsers(dest="command", required=True)
