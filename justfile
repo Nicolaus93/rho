@@ -1,7 +1,7 @@
 rho-gemma:
     OPENAI_BASE_URL="http://127.0.0.1:8001/v1" \
     OPENAI_API_MODE="chat_completions" \
-    uv run temporal-agent-harness-worker --provider openai --model gemma-4-E4B-it
+    uv run rho --provider openai --model gemma-4-E4B-it
 
 llm:
     /home/nico/Projects/llama.cpp/build/bin/llama-server \

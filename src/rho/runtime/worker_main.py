@@ -10,8 +10,8 @@ from temporalio.worker import Worker
 
 from ..activities import LLMActivities, SessionActivities, execute_tool
 from ..client import connect_client, load_client_config
-from ..constants import TASK_QUEUE, UPDATE_START_SESSION
-from ..models import CLIOverrides, HarnessWorkflowInput, StartSessionRequest, StartSessionResponse
+from ..constants import TASK_QUEUE, UPDATE_SHUTDOWN, UPDATE_START_SESSION
+from ..models import CLIOverrides, HarnessWorkflowInput, ShutdownRequest, StartSessionRequest, StartSessionResponse
 from ..workflows import AgenticWorkflow, ConsolidationWorkflow, HarnessWorkflow, SessionWorkflow
 from loguru import logger
 
@@ -30,9 +30,8 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def _start_session(client: Client, args: argparse.Namespace) -> str:
+async def _start_session(client: Client, harness_id: str, args: argparse.Namespace) -> str:
     cwd = os.path.abspath(args.cwd or os.getcwd())
-    harness_id = args.harness_id or _default_harness_id(cwd)
     overrides = CLIOverrides(cwd=cwd, model=args.model, provider=args.provider)
     harness = await client.start_workflow(
         HarnessWorkflow.run,
@@ -50,6 +49,28 @@ async def _start_session(client: Client, args: argparse.Namespace) -> str:
     return session.session_workflow_id
 
 
+async def _shutdown_session(client: Client, agent_workflow_id: str, harness_id: str) -> None:
+    session_workflow_id = agent_workflow_id.rsplit("/", 1)[0]
+    try:
+        handle = client.get_workflow_handle(agent_workflow_id)
+        await handle.execute_update(UPDATE_SHUTDOWN, ShutdownRequest(reason="worker shutdown"))
+        await asyncio.wait_for(handle.result(), timeout=2.0)
+    except asyncio.TimeoutError:
+        logger.debug("Agent workflow did not complete within timeout after shutdown signal")
+    except Exception:
+        logger.debug("Could not shut down agent workflow {}", agent_workflow_id)
+    try:
+        await asyncio.wait_for(client.get_workflow_handle(session_workflow_id).result(), timeout=2.0)
+    except asyncio.TimeoutError:
+        logger.debug("Session workflow did not complete within timeout")
+    except Exception:
+        logger.debug("Could not wait on session workflow {}", session_workflow_id)
+    try:
+        await client.get_workflow_handle(harness_id).execute_update(UPDATE_SHUTDOWN, ShutdownRequest(reason="worker shutdown"))
+    except Exception:
+        logger.debug("Could not shut down harness workflow {}", harness_id)
+
+
 async def _run_worker(worker: Worker) -> None:
     try:
         await worker.run()
@@ -64,6 +85,8 @@ async def _run_worker(worker: Worker) -> None:
 async def _run(args: argparse.Namespace) -> None:
     connection_config = load_client_config(args.temporal_host, args.namespace)
     workflow_names = [workflow_type.__name__ for workflow_type in (AgenticWorkflow, SessionWorkflow, HarnessWorkflow, ConsolidationWorkflow)]
+    cwd = os.path.abspath(args.cwd or os.getcwd())
+    harness_id = args.harness_id or _default_harness_id(cwd)
     client = await connect_client(config=connection_config)
     logger.info(
         "Connected to Temporal host={} namespace={} tls={}",
@@ -110,10 +133,13 @@ async def _run(args: argparse.Namespace) -> None:
         return
 
     worker_task = asyncio.create_task(_run_worker(worker))
+    agent_workflow_id: str | None = None
     try:
-        workflow_id = await _start_session(client, args)
-        await RhoApp(client, workflow_id).run_async()
+        agent_workflow_id = await _start_session(client, harness_id, args)
+        await RhoApp(client, agent_workflow_id).run_async()
     finally:
+        if agent_workflow_id is not None:
+            await _shutdown_session(client, agent_workflow_id, harness_id)
         worker_task.cancel()
         try:
             await worker_task

@@ -20,9 +20,8 @@ dev = [
 ]
 
 [project.scripts]
-temporal-agent-harness-worker = "rho.runtime.worker_main:main"
+rho = "rho.runtime.worker_main:main"
 temporal-agent-harness-client = "rho.runtime.client_main:main"
-rho = "rho.runtime.rho:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

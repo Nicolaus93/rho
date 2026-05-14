@@ -10,6 +10,7 @@ from ..constants import (
     AGENT_STATUS_PENDING_INIT,
     QUERY_GET_SESSIONS,
     SIGNAL_UPDATE_SESSION_STATUS,
+    UPDATE_SHUTDOWN,
     UPDATE_START_SESSION,
 )
 from ..models import (
@@ -18,6 +19,7 @@ from ..models import (
     HarnessWorkflowState,
     SessionWorkflowInput,
     SessionEntry,
+    ShutdownRequest,
     StartSessionRequest,
     StartSessionResponse,
     UpdateSessionStatusRequest,
@@ -53,6 +55,7 @@ class HarnessWorkflow:
     def __init__(self) -> None:
         self._state = HarnessWorkflowState(harness_id="")
         self._version = 0
+        self._shutdown_requested = False
 
     def _touch(self) -> None:
         self._version += 1
@@ -123,6 +126,11 @@ class HarnessWorkflow:
         )
         return StartSessionResponse(session_id=session_id, session_workflow_id=agent_workflow_id)
 
+    @workflow.update(name=UPDATE_SHUTDOWN)
+    async def shutdown(self, _input: ShutdownRequest = ShutdownRequest()) -> None:
+        self._shutdown_requested = True
+        self._touch()
+
     @workflow.run
     async def run(self, input: HarnessWorkflowInput) -> None:
         if input.continued_state is not None:
@@ -133,7 +141,10 @@ class HarnessWorkflow:
         while True:
             version = self._version
             try:
-                await workflow.wait_condition(lambda: self._version != version, timeout=idle_timeout)
+                await workflow.wait_condition(
+                    lambda: self._version != version or self._shutdown_requested,
+                    timeout=idle_timeout,
+                )
             except asyncio.TimeoutError:
                 workflow.continue_as_new(
                     HarnessWorkflowInput(
@@ -143,3 +154,5 @@ class HarnessWorkflow:
                         idle_timeout_seconds=input.idle_timeout_seconds,
                     )
                 )
+            if self._shutdown_requested:
+                return

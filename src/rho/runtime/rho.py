@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import hashlib
 import json
 import os
 import sys
+import uuid
 from collections.abc import Sequence
 
 from temporalio.client import Client, WorkflowHandle
@@ -35,8 +35,8 @@ from ..workflows import AgenticWorkflow, HarnessWorkflow
 
 
 def _default_harness_id(cwd: str) -> str:
-    digest = hashlib.sha1(cwd.encode("utf-8")).hexdigest()[:8]
-    return f"rho-{digest}"
+    path_slug = cwd.strip("/").replace("/", "-")
+    return f"{path_slug}-{uuid.uuid4().hex[:8]}"
 
 
 def _build_parser() -> argparse.ArgumentParser:
