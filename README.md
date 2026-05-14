@@ -1,17 +1,22 @@
-# Python runtime
+# rho
 
-This repo includes a Python implementation under `src/rho`.
+An agentic harness implemented in [Temporal](https://temporal.io), inspired by [temporal-agent-harness](https://github.com/mfateev/temporal-agent-harness).
 
-## Current status
+## Architecture
 
-The Python side currently provides:
+When you run `rho`, three workflows are started:
+
+- **HarnessWorkflow** — long-lived workflow tied to your working directory. Tracks all sessions and persists across restarts.
+- **SessionWorkflow** — one per `rho` invocation. Owns the lifecycle of a single conversation and reports its status back to the harness.
+- **AgenticWorkflow** — the actual agent loop. Receives user messages, calls the LLM, and produces replies.
+
+At the moment no tools are wired in, so the agent is a plain chat over whatever LLM you configure.
+
+## What's included
 
 - Worker + workflow entry point (`rho`)
 - Low-level workflow CLI (`rho-client`)
 - Core workflow/activity scaffolding
-- Phase-1 tool runtime for file and command tools
-
-It does **not** yet provide full feature parity with the Go implementation.
 
 ## Prerequisites
 
