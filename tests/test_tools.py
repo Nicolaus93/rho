@@ -12,7 +12,10 @@ from temporal_agent_harness.tools import (
 
 
 def test_resolve_retry_policy_non_retryable() -> None:
-    policy = resolve_retry_policy({"shell_command": ToolSpec("shell_command", retry_policy=RETRY_NONE)}, "shell_command")
+    policy = resolve_retry_policy(
+        {"shell_command": ToolSpec("shell_command", retry_policy=RETRY_NONE)},
+        "shell_command",
+    )
     assert policy.maximum_attempts == 1
 
 
@@ -33,7 +36,11 @@ def test_resolve_retry_policy_custom_attempts() -> None:
 
 
 def test_resolve_tool_timeout_prefers_llm_override() -> None:
-    timeout = resolve_tool_timeout({"read_file": ToolSpec("read_file", default_timeout_ms=30_000)}, "read_file", {"timeout_ms": 1500})
+    timeout = resolve_tool_timeout(
+        {"read_file": ToolSpec("read_file", default_timeout_ms=30_000)},
+        "read_file",
+        {"timeout_ms": 1500},
+    )
     assert timeout == timedelta(milliseconds=1500)
 
 

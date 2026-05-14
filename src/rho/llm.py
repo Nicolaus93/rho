@@ -6,7 +6,8 @@ import logging
 import os
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping, Protocol
-from urllib import error, request as urllib_request
+from urllib import error
+from urllib import request as urllib_request
 
 from .models import (
     FINISH_REASON_STOP,
@@ -16,7 +17,6 @@ from .models import (
     detect_provider,
 )
 from .tools import ToolSpec
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -227,7 +227,12 @@ class BaseHTTPProviderClient:
 
     def _parse_compact_response(self, request: CompactRequest, payload: dict[str, Any]) -> CompactResponse:
         if isinstance(payload.get("items"), list):
-            items = [ConversationItem(**item) if isinstance(item, dict) else ConversationItem(type="assistant_message", content=str(item)) for item in payload["items"]]
+            items = [
+                ConversationItem(**item)
+                if isinstance(item, dict)
+                else ConversationItem(type="assistant_message", content=str(item))
+                for item in payload["items"]
+            ]
         else:
             text = str(payload.get("summary") or payload.get("content") or "")
             items = [ConversationItem(type="assistant_message", content=text)] if text else []
@@ -344,7 +349,9 @@ class OpenAIClient(BaseHTTPProviderClient):
             usage = self._parse_usage(payload.get("usage"), fallback_text=text)
             return LLMResponse(
                 items=items,
-                finish_reason=str(first_choice.get("finish_reason") or payload.get("finish_reason") or FINISH_REASON_STOP),
+                finish_reason=str(
+                    first_choice.get("finish_reason") or payload.get("finish_reason") or FINISH_REASON_STOP
+                ),
                 token_usage=usage,
                 response_id=str(payload.get("id") or payload.get("response_id") or ""),
             )
@@ -499,10 +506,14 @@ class AnthropicClient(BaseHTTPProviderClient):
 
 class MultiProviderLLMClient:
     def __init__(self, providers: Mapping[str, LLMClient] | None = None) -> None:
-        self._providers = dict(providers) if providers is not None else {
-            "openai": OpenAIClient(),
-            "anthropic": AnthropicClient(),
-        }
+        self._providers = (
+            dict(providers)
+            if providers is not None
+            else {
+                "openai": OpenAIClient(),
+                "anthropic": AnthropicClient(),
+            }
+        )
 
     def provider_for(self, provider: str) -> LLMClient:
         if provider not in self._providers:

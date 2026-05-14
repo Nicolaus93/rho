@@ -17,8 +17,8 @@ from ..models import (
     CLIOverrides,
     HarnessWorkflowInput,
     HarnessWorkflowState,
-    SessionWorkflowInput,
     SessionEntry,
+    SessionWorkflowInput,
     ShutdownRequest,
     StartSessionRequest,
     StartSessionResponse,
@@ -122,7 +122,9 @@ class HarnessWorkflow:
             parent_close_policy=workflow.ParentClosePolicy.ABANDON,
         )
         await workflow.wait_condition(
-            lambda: any(s.session_id == session_id and s.status != AGENT_STATUS_PENDING_INIT for s in self._state.sessions)
+            lambda: any(
+                s.session_id == session_id and s.status != AGENT_STATUS_PENDING_INIT for s in self._state.sessions
+            )
         )
         return StartSessionResponse(session_id=session_id, session_workflow_id=agent_workflow_id)
 

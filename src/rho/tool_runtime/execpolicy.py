@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from collections.abc import Sequence
 
-from .command_safety import command_might_be_dangerous, is_known_safe_command, parse_shell_lc_plain_commands
+from .command_safety import (
+    command_might_be_dangerous,
+    is_known_safe_command,
+    parse_shell_lc_plain_commands,
+)
 
 
 class Decision(str, Enum):
@@ -41,8 +45,16 @@ class ExecPolicyManager:
 
         if any(command_might_be_dangerous(parts) for parts in command_groups):
             if effective_mode == "never":
-                return Evaluation(Decision.DENY, "Command blocked by safety heuristics.", parsed_subcommands or [])
-            return Evaluation(Decision.REQUIRE_APPROVAL, "Command requires approval due to safety heuristics.", parsed_subcommands or [])
+                return Evaluation(
+                    Decision.DENY,
+                    "Command blocked by safety heuristics.",
+                    parsed_subcommands or [],
+                )
+            return Evaluation(
+                Decision.REQUIRE_APPROVAL,
+                "Command requires approval due to safety heuristics.",
+                parsed_subcommands or [],
+            )
 
         if self._policy.rules.strip():
             return Evaluation(

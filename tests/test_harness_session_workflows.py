@@ -1,11 +1,22 @@
 from __future__ import annotations
 
-from temporalio.testing import WorkflowEnvironment
-from temporalio.worker import Worker
-
-from temporal_agent_harness.activities import LLMActivities, SessionActivities, execute_tool
-from temporal_agent_harness.constants import UPDATE_SHUTDOWN, UPDATE_START_SESSION, UPDATE_USER_INPUT
-from temporal_agent_harness.llm import CompactRequest, CompactResponse, LLMRequest, LLMResponse, MultiProviderLLMClient
+from temporal_agent_harness.activities import (
+    LLMActivities,
+    SessionActivities,
+    execute_tool,
+)
+from temporal_agent_harness.constants import (
+    UPDATE_SHUTDOWN,
+    UPDATE_START_SESSION,
+    UPDATE_USER_INPUT,
+)
+from temporal_agent_harness.llm import (
+    CompactRequest,
+    CompactResponse,
+    LLMRequest,
+    LLMResponse,
+    MultiProviderLLMClient,
+)
 from temporal_agent_harness.models import (
     ConversationItem,
     HarnessWorkflowInput,
@@ -17,7 +28,13 @@ from temporal_agent_harness.models import (
     TokenUsage,
     UserInput,
 )
-from temporal_agent_harness.workflows import AgenticWorkflow, HarnessWorkflow, SessionWorkflow
+from temporal_agent_harness.workflows import (
+    AgenticWorkflow,
+    HarnessWorkflow,
+    SessionWorkflow,
+)
+from temporalio.testing import WorkflowEnvironment
+from temporalio.worker import Worker
 
 
 class _FakeProvider:

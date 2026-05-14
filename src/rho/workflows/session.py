@@ -9,7 +9,13 @@ from ..constants import (
     QUERY_GET_AGENT_WORKFLOW_ID,
     SIGNAL_UPDATE_SESSION_STATUS,
 )
-from ..models import SessionWorkflowInput, UpdateSessionStatusRequest, WorkflowInput, WorkflowResult, default_session_configuration
+from ..models import (
+    SessionWorkflowInput,
+    UpdateSessionStatusRequest,
+    WorkflowInput,
+    WorkflowResult,
+    default_session_configuration,
+)
 from .agentic import AgenticWorkflow
 
 

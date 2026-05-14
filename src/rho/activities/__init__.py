@@ -1,3 +1,4 @@
+from ..models import TurnReplyActivityInput, TurnReplyActivityOutput
 from .llm import (
     CompactActivityInput,
     CompactActivityOutput,
@@ -9,7 +10,6 @@ from .llm import (
 )
 from .session import SessionActivities
 from .tools import execute_tool
-from ..models import TurnReplyActivityInput, TurnReplyActivityOutput
 
 __all__ = [
     "CompactActivityInput",

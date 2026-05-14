@@ -7,7 +7,6 @@ from typing import Any
 from temporalio.client import Client
 from temporalio.service import TLSConfig
 
-
 DEFAULT_HOST_PORT = "localhost:7233"
 DEFAULT_NAMESPACE = "default"
 

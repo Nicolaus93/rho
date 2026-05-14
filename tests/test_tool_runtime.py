@@ -49,9 +49,9 @@ def test_exec_policy_allows_safe_and_denies_dangerous_commands() -> None:
 
 
 def test_exec_policy_denies_when_rules_are_configured_but_unimplemented() -> None:
-    evaluation = ExecPolicyManager(Policy(approval_mode="never", rules='prefix_rule(pattern=["git"])')).evaluate_command(
-        ["git", "status"]
-    )
+    evaluation = ExecPolicyManager(
+        Policy(approval_mode="never", rules='prefix_rule(pattern=["git"])')
+    ).evaluate_command(["git", "status"])
     assert evaluation.decision == Decision.DENY
     assert "not implemented" in evaluation.reason.lower()
 
@@ -136,7 +136,11 @@ async def test_tool_runtime_grep_files_content_mode(tmp_path: Path) -> None:
         ToolActivityInput(
             call_id="grep-2",
             tool_name="grep_files",
-            arguments={"pattern": "alpha", "path": str(tmp_path), "output_mode": "content"},
+            arguments={
+                "pattern": "alpha",
+                "path": str(tmp_path),
+                "output_mode": "content",
+            },
             cwd=str(tmp_path),
         )
     )
@@ -158,14 +162,20 @@ async def test_shell_alias_routes_to_shell_command(tmp_path: Path) -> None:
     assert result.content == "hello"
 
 
-async def test_exec_command_and_write_stdin_support_minimal_process_io(tmp_path: Path) -> None:
+async def test_exec_command_and_write_stdin_support_minimal_process_io(
+    tmp_path: Path,
+) -> None:
     runtime = build_default_tool_runtime()
     start = await runtime.execute(
         ToolActivityInput(
             call_id="exec-1",
             tool_name="exec_command",
             arguments={
-                "command": [sys.executable, "-c", "import sys; print(sys.stdin.readline().strip())"],
+                "command": [
+                    sys.executable,
+                    "-c",
+                    "import sys; print(sys.stdin.readline().strip())",
+                ],
                 "wait_for_exit": False,
             },
             cwd=str(tmp_path),
@@ -178,7 +188,12 @@ async def test_exec_command_and_write_stdin_support_minimal_process_io(tmp_path:
         ToolActivityInput(
             call_id="stdin-1",
             tool_name="write_stdin",
-            arguments={"process_id": process_id, "content": "hello\n", "close_stdin": True, "wait_for_exit": True},
+            arguments={
+                "process_id": process_id,
+                "content": "hello\n",
+                "close_stdin": True,
+                "wait_for_exit": True,
+            },
             cwd=str(tmp_path),
         )
     )
@@ -200,7 +215,9 @@ async def test_shell_command_policy_blocks_dangerous_command(tmp_path: Path) -> 
     assert "blocked" in result.content.lower()
 
 
-async def test_shell_command_uses_authoritative_request_policy_fields(tmp_path: Path) -> None:
+async def test_shell_command_uses_authoritative_request_policy_fields(
+    tmp_path: Path,
+) -> None:
     runtime = build_default_tool_runtime()
     result = await runtime.execute(
         ToolActivityInput(
@@ -231,7 +248,12 @@ async def test_execute_tool_activity_uses_runtime(tmp_path: Path) -> None:
 async def test_unsupported_tool_returns_error(tmp_path: Path) -> None:
     runtime = build_default_tool_runtime()
     result = await runtime.execute(
-        ToolActivityInput(call_id="missing-1", tool_name="unknown_tool", arguments={}, cwd=str(tmp_path))
+        ToolActivityInput(
+            call_id="missing-1",
+            tool_name="unknown_tool",
+            arguments={},
+            cwd=str(tmp_path),
+        )
     )
     assert result.success is False
     assert "Unsupported tool" in result.content
@@ -240,7 +262,12 @@ async def test_unsupported_tool_returns_error(tmp_path: Path) -> None:
 async def test_apply_patch_is_not_exposed_by_python_runtime(tmp_path: Path) -> None:
     runtime = build_default_tool_runtime()
     result = await runtime.execute(
-        ToolActivityInput(call_id="missing-apply", tool_name="apply_patch", arguments={}, cwd=str(tmp_path))
+        ToolActivityInput(
+            call_id="missing-apply",
+            tool_name="apply_patch",
+            arguments={},
+            cwd=str(tmp_path),
+        )
     )
     assert result.success is False
     assert "Unsupported tool" in result.content

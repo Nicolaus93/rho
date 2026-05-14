@@ -23,8 +23,16 @@ def test_parse_reasoning_variants() -> None:
 def test_profile_registry_resolves_provider_model_and_suffixes() -> None:
     registry = ProfileRegistry(
         [
-            ModelProfile(prompt_suffix="base", agents_file_names=["BASE.md"], tools=ToolOverrides(disable=["a"])),
-            ModelProfile(provider="anthropic", prompt_suffix="provider", agents_file_names=["CLAUDE.md"]),
+            ModelProfile(
+                prompt_suffix="base",
+                agents_file_names=["BASE.md"],
+                tools=ToolOverrides(disable=["a"]),
+            ),
+            ModelProfile(
+                provider="anthropic",
+                prompt_suffix="provider",
+                agents_file_names=["CLAUDE.md"],
+            ),
             ModelProfile(
                 provider="anthropic",
                 model_pattern=r"^claude-3",
@@ -51,7 +59,12 @@ def test_builtin_openai_reasoning_profile_applies_defaults() -> None:
     assert config.provider == "openai"
     assert config.reasoning_effort == "medium"
     assert resolved.agents_file_names == ["AGENTS.override.md", "AGENTS.md"]
-    assert [preset.effort for preset in resolved.supported_reasoning_efforts] == ["low", "medium", "high", "xhigh"]
+    assert [preset.effort for preset in resolved.supported_reasoning_efforts] == [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+    ]
 
 
 def test_detect_provider_matches_model_prefixes() -> None:
@@ -61,8 +74,16 @@ def test_detect_provider_matches_model_prefixes() -> None:
 
 
 def test_merge_model_profiles_replaces_and_unions_fields() -> None:
-    base = ModelProfile(agents_file_names=["A.md"], prompt_suffix="one", tools=ToolOverrides(disable=["x"]))
-    overlay = ModelProfile(agents_file_names=["B.md"], prompt_suffix="two", tools=ToolOverrides(disable=["y"]))
+    base = ModelProfile(
+        agents_file_names=["A.md"],
+        prompt_suffix="one",
+        tools=ToolOverrides(disable=["x"]),
+    )
+    overlay = ModelProfile(
+        agents_file_names=["B.md"],
+        prompt_suffix="two",
+        tools=ToolOverrides(disable=["y"]),
+    )
 
     merged = merge_model_profiles(base, overlay)
 

@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-
 REASONING_EFFORT_NONE = "none"
 REASONING_EFFORT_MINIMAL = "minimal"
 REASONING_EFFORT_LOW = "low"
@@ -361,10 +360,12 @@ class SessionConfiguration:
     disabled_skills: list[str] = field(default_factory=list)
 
     def apply_model_profile(self, registry: ProfileRegistry | None = None) -> ResolvedModelProfile:
-        resolved = self.model.apply_profile_defaults((registry or ProfileRegistry()).resolve(
-            self.model.provider or detect_provider(self.model.model),
-            self.model.model,
-        ))
+        resolved = self.model.apply_profile_defaults(
+            (registry or ProfileRegistry()).resolve(
+                self.model.provider or detect_provider(self.model.model),
+                self.model.model,
+            )
+        )
         self.model_profile = resolved
         return resolved
 

@@ -5,7 +5,11 @@ from datetime import timedelta
 
 from temporalio import workflow
 
-from ..models import ConsolidationWorkflowInput, ConsolidationWorkflowResult, ConsolidationWorkflowState
+from ..models import (
+    ConsolidationWorkflowInput,
+    ConsolidationWorkflowResult,
+    ConsolidationWorkflowState,
+)
 
 
 @workflow.defn(name="ConsolidationWorkflow")
@@ -44,7 +48,10 @@ class ConsolidationWorkflow:
                 )
             )
         try:
-            await workflow.wait_condition(lambda: self._shutdown, timeout=timedelta(seconds=input.idle_timeout_seconds))
+            await workflow.wait_condition(
+                lambda: self._shutdown,
+                timeout=timedelta(seconds=input.idle_timeout_seconds),
+            )
         except asyncio.TimeoutError:
             workflow.continue_as_new(
                 ConsolidationWorkflowInput(

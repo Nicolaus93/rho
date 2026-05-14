@@ -1,15 +1,20 @@
 from temporal_agent_harness.activities import LLMActivities, LLMActivityInput
 from temporal_agent_harness.llm import (
-    CompactResponse,
     AnthropicClient,
     CompactRequest,
-    LLMResponse,
+    CompactResponse,
     LLMRequest,
+    LLMResponse,
     MultiProviderLLMClient,
     OpenAIClient,
     detect_provider_from_model,
 )
-from temporal_agent_harness.models import ConversationItem, ModelConfig, TokenUsage, TurnReplyActivityInput
+from temporal_agent_harness.models import (
+    ConversationItem,
+    ModelConfig,
+    TokenUsage,
+    TurnReplyActivityInput,
+)
 
 
 class FakeProvider:
@@ -20,7 +25,12 @@ class FakeProvider:
     async def call(self, request: LLMRequest):
         self.called_with.append(request.model_config.model)
         return LLMResponse(
-            items=[ConversationItem(type="assistant_message", content=f"{self.name}:{request.model_config.model}")],
+            items=[
+                ConversationItem(
+                    type="assistant_message",
+                    content=f"{self.name}:{request.model_config.model}",
+                )
+            ],
             finish_reason="stop",
             token_usage=TokenUsage.from_counts(input_tokens=2, output_tokens=1),
             response_id=f"{self.name}-resp",
@@ -45,7 +55,10 @@ async def test_multi_provider_dispatch_routes_by_provider_and_model() -> None:
     client = MultiProviderLLMClient({"openai": openai, "anthropic": anthropic})
 
     response = await client.call(
-        LLMRequest(history=[], model_config=ModelConfig(provider="anthropic", model="claude-3-7-sonnet"))
+        LLMRequest(
+            history=[],
+            model_config=ModelConfig(provider="anthropic", model="claude-3-7-sonnet"),
+        )
     )
     compact = await client.compact(CompactRequest(model="gpt-4o-mini", input=[]))
 
@@ -86,7 +99,10 @@ async def test_openai_chat_completions_mode_uses_standard_request_and_response_s
         assert messages == [
             {
                 "role": "system",
-                "content": "Base instructions:\nBe helpful.\n\nDeveloper instructions:\nStay concise.\n\nUser instructions:\nReply in one sentence.",
+                "content": (
+                    "Base instructions:\nBe helpful.\n\nDeveloper instructions:\nStay concise.\n\n"
+                    "User instructions:\nReply in one sentence."
+                ),
             },
             {"role": "user", "content": "hi"},
         ]
@@ -129,13 +145,21 @@ async def test_openai_auto_mode_falls_back_to_chat_completions_for_missing_respo
         assert payload["messages"] == [{"role": "user", "content": "hi"}]
         return {
             "id": "chat-2",
-            "choices": [{"message": {"role": "assistant", "content": "fallback ok"}, "finish_reason": "stop"}],
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "fallback ok"},
+                    "finish_reason": "stop",
+                }
+            ],
             "usage": {"prompt_tokens": 4, "completion_tokens": 2},
         }
 
     client = OpenAIClient(transport=transport, api_mode="auto")
     result = await client.call(
-        LLMRequest(history=[ConversationItem(type="user_message", content="hi")], model_config=ModelConfig(model="gpt-4o-mini"))
+        LLMRequest(
+            history=[ConversationItem(type="user_message", content="hi")],
+            model_config=ModelConfig(model="gpt-4o-mini"),
+        )
     )
 
     assert calls == ["/responses", "/chat/completions"]
@@ -201,7 +225,10 @@ async def test_anthropic_adapter_uses_transport_stub() -> None:
 
     client = AnthropicClient(transport=transport)
     result = await client.call(
-        LLMRequest(history=[], model_config=ModelConfig(provider="anthropic", model="claude-3-7-sonnet"))
+        LLMRequest(
+            history=[],
+            model_config=ModelConfig(provider="anthropic", model="claude-3-7-sonnet"),
+        )
     )
 
     assert result.response_id == "msg-1"

@@ -2,10 +2,6 @@ from __future__ import annotations
 
 import asyncio
 
-from temporalio import activity
-from temporalio.testing import WorkflowEnvironment
-from temporalio.worker import Worker
-
 from temporal_agent_harness.activities import LLMActivities
 from temporal_agent_harness.constants import (
     PHASE_WAITING_FOR_INPUT,
@@ -14,20 +10,30 @@ from temporal_agent_harness.constants import (
     UPDATE_SHUTDOWN,
     UPDATE_USER_INPUT,
 )
+from temporal_agent_harness.llm import (
+    CompactRequest,
+    CompactResponse,
+    LLMRequest,
+    LLMResponse,
+    MultiProviderLLMClient,
+)
 from temporal_agent_harness.models import (
+    ConversationItem,
     InterruptRequest,
     InterruptResponse,
     ShutdownRequest,
     ShutdownResponse,
     StateUpdateRequest,
     StateUpdateResponse,
+    TokenUsage,
     TurnReplyActivityInput,
     UserInput,
     WorkflowInput,
 )
-from temporal_agent_harness.llm import CompactRequest, CompactResponse, LLMRequest, LLMResponse, MultiProviderLLMClient
-from temporal_agent_harness.models import ConversationItem, TokenUsage
 from temporal_agent_harness.workflows import AgenticWorkflow
+from temporalio import activity
+from temporalio.testing import WorkflowEnvironment
+from temporalio.worker import Worker
 
 
 async def _wait_for_turn_complete(handle, *, since_seq: int, since_phase: str) -> StateUpdateResponse:
@@ -85,7 +91,11 @@ async def test_agentic_workflow_handler_basics() -> None:
             )
             await env.sleep(1)
             items = await handle.query(AgenticWorkflow.get_conversation_items)
-            assert [item.type for item in items[:3]] == ["turn_started", "user_message", "assistant_message"]
+            assert [item.type for item in items[:3]] == [
+                "turn_started",
+                "user_message",
+                "assistant_message",
+            ]
             status = await handle.query(AgenticWorkflow.get_turn_status)
             assert status.phase == PHASE_WAITING_FOR_INPUT
 

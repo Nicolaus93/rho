@@ -57,7 +57,9 @@ def _normalize_argv(argv: Sequence[str] | str) -> list[str]:
 def parse_shell_lc_plain_commands(argv: Sequence[str] | str) -> list[list[str]] | None:
     parts = _normalize_argv(argv)
     shell_program = parts[0] if parts else ""
-    if len(parts) < 3 or (shell_program not in _SHELL_PROGRAMS and os.path.basename(shell_program) not in _SHELL_PROGRAMS):
+    if len(parts) < 3 or (
+        shell_program not in _SHELL_PROGRAMS and os.path.basename(shell_program) not in _SHELL_PROGRAMS
+    ):
         return None
     if parts[1] not in {"-c", "-lc"}:
         return None

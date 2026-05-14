@@ -4,7 +4,12 @@ from dataclasses import dataclass, field
 
 from temporalio import activity
 
-from ..llm import CompactRequest, LLMRequest, MultiProviderLLMClient, create_default_llm_client
+from ..llm import (
+    CompactRequest,
+    LLMRequest,
+    MultiProviderLLMClient,
+    create_default_llm_client,
+)
 from ..models import ConversationItem, ModelConfig, TokenUsage, TurnReplyActivityInput
 from ..tools import ToolSpec
 
@@ -71,7 +76,11 @@ class LLMActivities:
             )
         )
         reply = next(
-            (item.content.strip() for item in response.items if item.type == "assistant_message" and item.content.strip()),
+            (
+                item.content.strip()
+                for item in response.items
+                if item.type == "assistant_message" and item.content.strip()
+            ),
             "",
         )
         if not reply:

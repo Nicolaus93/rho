@@ -16,7 +16,7 @@ async def handle_read_file(context: ToolContext) -> ToolActivityOutput:
     lines = text.splitlines(keepends=True)
     offset = max(_to_int(context.request.arguments.get("offset"), default=1), 1)
     limit = max(_to_int(context.request.arguments.get("limit"), default=2000), 0)
-    selected = lines[offset - 1:] if limit == 0 else lines[offset - 1 : offset - 1 + limit]
+    selected = lines[offset - 1 :] if limit == 0 else lines[offset - 1 : offset - 1 + limit]
     if not selected and text and offset > len(lines):
         return ToolActivityOutput(call_id=context.request.call_id, content="", success=True)
     if not selected and not text:
@@ -104,7 +104,10 @@ def _collect_entries(root: Path, depth: int) -> list[str]:
     entries: list[str] = []
 
     def visit(current: Path, current_depth: int) -> None:
-        children = sorted(current.iterdir(), key=lambda child: (not child.is_dir(), child.name.lower(), child.name))
+        children = sorted(
+            current.iterdir(),
+            key=lambda child: (not child.is_dir(), child.name.lower(), child.name),
+        )
         for child in children:
             relative = child.relative_to(root).as_posix()
             entries.append(relative + ("/" if child.is_dir() else ""))

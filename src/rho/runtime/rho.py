@@ -31,7 +31,7 @@ from ..models import (
     StateUpdateResponse,
     UserInput,
 )
-from ..workflows import AgenticWorkflow, HarnessWorkflow
+from ..workflows import HarnessWorkflow
 
 
 def _default_harness_id(cwd: str) -> str:
@@ -56,7 +56,9 @@ async def _start_session(args: argparse.Namespace) -> dict[str, str]:
     return session
 
 
-async def _connect_and_start_session(args: argparse.Namespace) -> tuple[Client, dict[str, str]]:
+async def _connect_and_start_session(
+    args: argparse.Namespace,
+) -> tuple[Client, dict[str, str]]:
     cwd = os.path.abspath(args.cwd or os.getcwd())
     harness_id = args.harness_id or _default_harness_id(cwd)
     overrides = CLIOverrides(cwd=cwd, model=args.model, provider=args.provider)

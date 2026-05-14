@@ -25,8 +25,8 @@ from ..constants import (
     UPDATE_USER_INPUT,
 )
 from ..models import (
-    AgentInputSignal,
     AgenticWorkflowState,
+    AgentInputSignal,
     ConversationItem,
     InterruptRequest,
     InterruptResponse,
@@ -91,7 +91,13 @@ class AgenticWorkflow:
         remaining = 100
         if self._config_context_window > 0:
             estimated = self._estimate_tokens()
-            remaining = max(0, min(100, ((self._config_context_window - estimated) * 100) // self._config_context_window))
+            remaining = max(
+                0,
+                min(
+                    100,
+                    ((self._config_context_window - estimated) * 100) // self._config_context_window,
+                ),
+            )
         return TurnStatus(
             phase=self._phase,
             current_turn_id=self._current_turn_id,
@@ -146,7 +152,11 @@ class AgenticWorkflow:
         self._interrupt_note = "Interrupted."
         if self._current_turn_id:
             self._append_item(
-                ConversationItem(type=ITEM_TYPE_TURN_COMPLETE, turn_id=self._current_turn_id, content="interrupted")
+                ConversationItem(
+                    type=ITEM_TYPE_TURN_COMPLETE,
+                    turn_id=self._current_turn_id,
+                    content="interrupted",
+                )
             )
         self._phase = PHASE_WAITING_FOR_INPUT
         self._state_version += 1
@@ -247,7 +257,11 @@ class AgenticWorkflow:
                 turn_id, message = self._pending_turns.pop(0)
                 self._current_turn_id = turn_id
                 await self._process_turn(turn_id, message)
-                if self._turns_in_run >= input.max_turns_per_run and not self._pending_turns and not self._shutdown_requested:
+                if (
+                    self._turns_in_run >= input.max_turns_per_run
+                    and not self._pending_turns
+                    and not self._shutdown_requested
+                ):
                     self._draining = True
                     workflow.continue_as_new(
                         WorkflowInput(
@@ -265,7 +279,11 @@ class AgenticWorkflow:
                     )
             if self._shutdown_requested and not self._pending_turns:
                 final_message = next(
-                    (item.content for item in reversed(self._history) if item.type == ITEM_TYPE_ASSISTANT_MESSAGE and item.content),
+                    (
+                        item.content
+                        for item in reversed(self._history)
+                        if item.type == ITEM_TYPE_ASSISTANT_MESSAGE and item.content
+                    ),
                     "",
                 )
                 return WorkflowResult(
@@ -279,7 +297,10 @@ class AgenticWorkflow:
             if self._pending_turns:
                 continue
             try:
-                await workflow.wait_condition(lambda: bool(self._pending_turns) or self._shutdown_requested, timeout=idle_timeout)
+                await workflow.wait_condition(
+                    lambda: bool(self._pending_turns) or self._shutdown_requested,
+                    timeout=idle_timeout,
+                )
             except asyncio.TimeoutError:
                 self._draining = True
                 workflow.continue_as_new(

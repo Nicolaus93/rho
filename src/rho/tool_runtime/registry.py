@@ -62,7 +62,11 @@ class ToolRuntime:
     async def execute(self, request: ToolActivityInput) -> ToolActivityOutput:
         handler = self._registry.get(request.tool_name)
         if handler is None:
-            return ToolActivityOutput(call_id=request.call_id, content=f"Unsupported tool: {request.tool_name}", success=False)
+            return ToolActivityOutput(
+                call_id=request.call_id,
+                content=f"Unsupported tool: {request.tool_name}",
+                success=False,
+            )
         cwd = Path(request.cwd or os.getcwd()).expanduser()
         if not cwd.is_absolute():
             cwd = (Path(os.getcwd()) / cwd).resolve()
@@ -76,7 +80,12 @@ class ToolRuntime:
 
 def build_default_tool_runtime() -> ToolRuntime:
     from .commands import handle_exec_command, handle_shell_command, handle_write_stdin
-    from .filesystem import handle_grep_files, handle_list_dir, handle_read_file, handle_write_file
+    from .filesystem import (
+        handle_grep_files,
+        handle_list_dir,
+        handle_read_file,
+        handle_write_file,
+    )
 
     registry = ToolRegistry()
     registry.register("read_file", handle_read_file)

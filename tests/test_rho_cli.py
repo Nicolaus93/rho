@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import json
 
-from temporalio.testing import WorkflowEnvironment
-from temporalio.worker import Worker
-
 from temporal_agent_harness.activities import LLMActivities
-from temporal_agent_harness.constants import PHASE_LLM_CALLING, PHASE_WAITING_FOR_INPUT, TASK_QUEUE, UPDATE_SHUTDOWN, UPDATE_START_SESSION
-from temporal_agent_harness.llm import CompactRequest, CompactResponse, LLMRequest, LLMResponse, MultiProviderLLMClient
+from temporal_agent_harness.constants import (
+    TASK_QUEUE,
+    UPDATE_SHUTDOWN,
+    UPDATE_START_SESSION,
+)
+from temporal_agent_harness.llm import (
+    CompactRequest,
+    CompactResponse,
+    LLMRequest,
+    LLMResponse,
+    MultiProviderLLMClient,
+)
 from temporal_agent_harness.models import (
     ConversationItem,
     HarnessWorkflowInput,
@@ -21,7 +28,13 @@ from temporal_agent_harness.models import (
     UserInput,
 )
 from temporal_agent_harness.runtime import rho
-from temporal_agent_harness.workflows import AgenticWorkflow, HarnessWorkflow, SessionWorkflow
+from temporal_agent_harness.workflows import (
+    AgenticWorkflow,
+    HarnessWorkflow,
+    SessionWorkflow,
+)
+from temporalio.testing import WorkflowEnvironment
+from temporalio.worker import Worker
 
 
 class _FakeProvider:
@@ -126,22 +139,25 @@ async def test_rho_cli_starts_harness_backed_session(monkeypatch, capsys, tmp_pa
             workflows=[AgenticWorkflow, SessionWorkflow, HarnessWorkflow],
             activities=[llm_activities.generate_turn_reply],
         ):
+
             async def fake_connect_client(host_port_override: str = "", namespace_override: str = ""):
                 return env.client
 
             monkeypatch.setattr(rho, "connect_client", fake_connect_client)
 
-            await rho._main([
-                "List",
-                "files",
-                "in",
-                "this",
-                "directory",
-                "--cwd",
-                str(tmp_path),
-                "--harness-id",
-                "rho-test-harness",
-            ])
+            await rho._main(
+                [
+                    "List",
+                    "files",
+                    "in",
+                    "this",
+                    "directory",
+                    "--cwd",
+                    str(tmp_path),
+                    "--harness-id",
+                    "rho-test-harness",
+                ]
+            )
 
             output = json.loads(capsys.readouterr().out)
             assert output["harness_id"] == "rho-test-harness"
@@ -156,7 +172,9 @@ async def test_rho_cli_starts_harness_backed_session(monkeypatch, capsys, tmp_pa
 
             agent = env.client.get_workflow_handle(output["workflow_id"])
             history = await agent.query(AgenticWorkflow.get_conversation_items)
-            assert any(item.type == "user_message" and item.content == "List files in this directory" for item in history)
+            assert any(
+                item.type == "user_message" and item.content == "List files in this directory" for item in history
+            )
             assert any(item.type == "assistant_message" for item in history)
 
             shutdown = await agent.execute_update(
@@ -178,6 +196,7 @@ async def test_rho_interactive_session_prints_replies_in_same_workflow(monkeypat
             workflows=[AgenticWorkflow, SessionWorkflow, HarnessWorkflow],
             activities=[llm_activities.generate_turn_reply],
         ):
+
             async def fake_connect_client(host_port_override: str = "", namespace_override: str = ""):
                 return env.client
 
@@ -193,17 +212,19 @@ async def test_rho_interactive_session_prints_replies_in_same_workflow(monkeypat
             monkeypatch.setattr(rho, "_should_run_interactive", lambda: True)
             monkeypatch.setattr(rho, "_read_terminal_line", fake_read_terminal_line)
 
-            await rho._main([
-                "List",
-                "files",
-                "in",
-                "this",
-                "directory",
-                "--cwd",
-                str(tmp_path),
-                "--harness-id",
-                "rho-interactive",
-            ])
+            await rho._main(
+                [
+                    "List",
+                    "files",
+                    "in",
+                    "this",
+                    "directory",
+                    "--cwd",
+                    str(tmp_path),
+                    "--harness-id",
+                    "rho-interactive",
+                ]
+            )
 
             output = capsys.readouterr().out
             assert "LLM:List files in this directory" in output

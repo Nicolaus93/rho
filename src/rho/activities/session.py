@@ -24,4 +24,9 @@ class SessionActivities:
                 return WaitForSessionReadyOutput(agent_workflow_id=agent_workflow_id)
             if asyncio.get_running_loop().time() >= deadline:
                 raise TimeoutError(f"session {input.session_workflow_id} did not become ready")
-            await asyncio.sleep(max(input.poll_interval_ms / 1000, timedelta(milliseconds=50).total_seconds()))
+            await asyncio.sleep(
+                max(
+                    input.poll_interval_ms / 1000,
+                    timedelta(milliseconds=50).total_seconds(),
+                )
+            )

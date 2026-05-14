@@ -10,7 +10,6 @@ from temporalio.common import RetryPolicy
 
 from .models import ConversationItem, ToolActivityInput, ToolActivityOutput
 
-
 DEFAULT_TOOL_TIMEOUT_MS = 120_000
 
 

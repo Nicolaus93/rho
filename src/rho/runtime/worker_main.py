@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import os
 
+from loguru import logger
 from temporalio.client import Client
 from temporalio.common import WorkflowIDConflictPolicy, WorkflowIDReusePolicy
 from temporalio.worker import Worker
@@ -11,10 +12,19 @@ from temporalio.worker import Worker
 from ..activities import LLMActivities, SessionActivities, execute_tool
 from ..client import connect_client, load_client_config
 from ..constants import TASK_QUEUE, UPDATE_SHUTDOWN, UPDATE_START_SESSION
-from ..models import CLIOverrides, HarnessWorkflowInput, ShutdownRequest, StartSessionRequest, StartSessionResponse
-from ..workflows import AgenticWorkflow, ConsolidationWorkflow, HarnessWorkflow, SessionWorkflow
-from loguru import logger
-
+from ..models import (
+    CLIOverrides,
+    HarnessWorkflowInput,
+    ShutdownRequest,
+    StartSessionRequest,
+    StartSessionResponse,
+)
+from ..workflows import (
+    AgenticWorkflow,
+    ConsolidationWorkflow,
+    HarnessWorkflow,
+    SessionWorkflow,
+)
 from .rho import _default_harness_id, _should_run_interactive
 from .tui import RhoApp
 
@@ -66,7 +76,9 @@ async def _shutdown_session(client: Client, agent_workflow_id: str, harness_id: 
     except Exception:
         logger.debug("Could not wait on session workflow {}", session_workflow_id)
     try:
-        await client.get_workflow_handle(harness_id).execute_update(UPDATE_SHUTDOWN, ShutdownRequest(reason="worker shutdown"))
+        await client.get_workflow_handle(harness_id).execute_update(
+            UPDATE_SHUTDOWN, ShutdownRequest(reason="worker shutdown")
+        )
     except Exception:
         logger.debug("Could not shut down harness workflow {}", harness_id)
 
@@ -84,7 +96,15 @@ async def _run_worker(worker: Worker) -> None:
 
 async def _run(args: argparse.Namespace) -> None:
     connection_config = load_client_config(args.temporal_host, args.namespace)
-    workflow_names = [workflow_type.__name__ for workflow_type in (AgenticWorkflow, SessionWorkflow, HarnessWorkflow, ConsolidationWorkflow)]
+    workflow_names = [
+        workflow_type.__name__
+        for workflow_type in (
+            AgenticWorkflow,
+            SessionWorkflow,
+            HarnessWorkflow,
+            ConsolidationWorkflow,
+        )
+    ]
     cwd = os.path.abspath(args.cwd or os.getcwd())
     harness_id = args.harness_id or _default_harness_id(cwd)
     client = await connect_client(config=connection_config)
@@ -110,7 +130,12 @@ async def _run(args: argparse.Namespace) -> None:
     worker = Worker(
         client,
         task_queue=TASK_QUEUE,
-        workflows=[AgenticWorkflow, SessionWorkflow, HarnessWorkflow, ConsolidationWorkflow],
+        workflows=[
+            AgenticWorkflow,
+            SessionWorkflow,
+            HarnessWorkflow,
+            ConsolidationWorkflow,
+        ],
         activities=[
             llm_activities.generate_turn_reply,
             execute_tool,

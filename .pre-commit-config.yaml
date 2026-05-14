@@ -1,0 +1,18 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.13
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: pyrefly
+        name: pyrefly
+        entry: pyrefly check
+        language: python
+        additional_dependencies: [pyrefly==1.0.0]
+        types: [python]
+        pass_filenames: false
+        args: [src]

@@ -45,10 +45,16 @@ async def handle_write_stdin(context: ToolContext) -> ToolActivityOutput:
     if context.request.arguments.get("close_stdin") or context.request.arguments.get("eof"):
         process.stdin.close()
     if context.request.arguments.get("wait_for_exit"):
-        stdout, stderr = await _communicate_with_timeout(process, timeout_ms=context.request.arguments.get("timeout_ms"))
+        stdout, stderr = await _communicate_with_timeout(
+            process, timeout_ms=context.request.arguments.get("timeout_ms")
+        )
         context.process_store.pop(process_id, None)
         return _format_process_result(context, process, stdout, stderr)
-    return ToolActivityOutput(call_id=context.request.call_id, content=f"Wrote stdin to process {process_id}", success=True)
+    return ToolActivityOutput(
+        call_id=context.request.call_id,
+        content=f"Wrote stdin to process {process_id}",
+        success=True,
+    )
 
 
 def _coerce_exec_argv(arguments: dict[str, object]) -> list[str]:
@@ -96,10 +102,20 @@ async def _run_process(context: ToolContext, command: list[str]) -> ToolActivity
     )
     if context.request.arguments.get("wait_for_exit") is False or context.request.arguments.get("background"):
         process_id = uuid.uuid4().hex
-        context.process_store[process_id] = RuntimeProcess(process_id=process_id, process=process, command=tuple(command))
-        return ToolActivityOutput(call_id=context.request.call_id, content=f"Started process {process_id}", success=True)
+        context.process_store[process_id] = RuntimeProcess(
+            process_id=process_id, process=process, command=tuple(command)
+        )
+        return ToolActivityOutput(
+            call_id=context.request.call_id,
+            content=f"Started process {process_id}",
+            success=True,
+        )
     stdin_data = _stdin_payload(context.request.arguments)
-    stdout, stderr = await _communicate_with_timeout(process, stdin_data=stdin_data, timeout_ms=context.request.arguments.get("timeout_ms"))
+    stdout, stderr = await _communicate_with_timeout(
+        process,
+        stdin_data=stdin_data,
+        timeout_ms=context.request.arguments.get("timeout_ms"),
+    )
     return _format_process_result(context, process, stdout, stderr)
 
 

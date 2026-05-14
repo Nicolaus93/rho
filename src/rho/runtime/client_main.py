@@ -6,8 +6,14 @@ import json
 import uuid
 
 from ..client import connect_client
-from ..constants import TASK_QUEUE
-from ..models import InterruptRequest, ShutdownRequest, UserInput, WorkflowInput, default_session_configuration
+from ..constants import TASK_QUEUE, UPDATE_INTERRUPT, UPDATE_SHUTDOWN, UPDATE_USER_INPUT
+from ..models import (
+    InterruptRequest,
+    ShutdownRequest,
+    UserInput,
+    WorkflowInput,
+    default_session_configuration,
+)
 from ..workflows import AgenticWorkflow
 
 
@@ -29,7 +35,7 @@ async def _cmd_start(args: argparse.Namespace) -> None:
 async def _cmd_send(args: argparse.Namespace) -> None:
     client = await connect_client(args.temporal_host, args.namespace)
     handle = client.get_workflow_handle(args.workflow_id)
-    result = await handle.execute_update(AgenticWorkflow.user_input, UserInput(content=args.message))
+    result = await handle.execute_update(UPDATE_USER_INPUT, UserInput(content=args.message))
     print(json.dumps(result, default=lambda value: value.__dict__))
 
 
@@ -43,14 +49,14 @@ async def _cmd_history(args: argparse.Namespace) -> None:
 async def _cmd_interrupt(args: argparse.Namespace) -> None:
     client = await connect_client(args.temporal_host, args.namespace)
     handle = client.get_workflow_handle(args.workflow_id)
-    result = await handle.execute_update(AgenticWorkflow.interrupt, InterruptRequest())
+    result = await handle.execute_update(UPDATE_INTERRUPT, InterruptRequest())
     print(json.dumps(result, default=lambda value: value.__dict__))
 
 
 async def _cmd_end(args: argparse.Namespace) -> None:
     client = await connect_client(args.temporal_host, args.namespace)
     handle = client.get_workflow_handle(args.workflow_id)
-    result = await handle.execute_update(AgenticWorkflow.shutdown, ShutdownRequest(reason=args.reason))
+    result = await handle.execute_update(UPDATE_SHUTDOWN, ShutdownRequest(reason=args.reason))
     print(json.dumps(result, default=lambda value: value.__dict__))
 
 
