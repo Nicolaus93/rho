@@ -1,4 +1,4 @@
-from temporal_agent_harness.models import (
+from rho.models import (
     ModelConfig,
     ModelProfile,
     ProfileRegistry,

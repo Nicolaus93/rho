@@ -4,9 +4,9 @@ import asyncio
 import sys
 from pathlib import Path
 
-from temporal_agent_harness.activities.tools import execute_tool
-from temporal_agent_harness.models import ToolActivityInput
-from temporal_agent_harness.tool_runtime import (
+from rho.activities.tools import execute_tool
+from rho.models import ToolActivityInput
+from rho.tool_runtime import (
     Decision,
     ExecPolicyManager,
     Policy,

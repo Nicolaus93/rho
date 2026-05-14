@@ -1,5 +1,5 @@
-from temporal_agent_harness.activities import LLMActivities, LLMActivityInput
-from temporal_agent_harness.llm import (
+from rho.activities import LLMActivities, LLMActivityInput
+from rho.llm import (
     AnthropicClient,
     CompactRequest,
     CompactResponse,
@@ -9,7 +9,7 @@ from temporal_agent_harness.llm import (
     OpenAIClient,
     detect_provider_from_model,
 )
-from temporal_agent_harness.models import (
+from rho.models import (
     ConversationItem,
     ModelConfig,
     TokenUsage,

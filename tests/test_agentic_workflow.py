@@ -2,22 +2,26 @@ from __future__ import annotations
 
 import asyncio
 
-from temporal_agent_harness.activities import LLMActivities
-from temporal_agent_harness.constants import (
+from temporalio import activity
+from temporalio.testing import WorkflowEnvironment
+from temporalio.worker import Worker
+
+from rho.activities import LLMActivities, LLMActivityInput, LLMActivityOutput
+from rho.constants import (
     PHASE_WAITING_FOR_INPUT,
     UPDATE_GET_STATE_UPDATE,
     UPDATE_INTERRUPT,
     UPDATE_SHUTDOWN,
     UPDATE_USER_INPUT,
 )
-from temporal_agent_harness.llm import (
+from rho.llm import (
     CompactRequest,
     CompactResponse,
     LLMRequest,
     LLMResponse,
     MultiProviderLLMClient,
 )
-from temporal_agent_harness.models import (
+from rho.models import (
     ConversationItem,
     InterruptRequest,
     InterruptResponse,
@@ -26,14 +30,10 @@ from temporal_agent_harness.models import (
     StateUpdateRequest,
     StateUpdateResponse,
     TokenUsage,
-    TurnReplyActivityInput,
     UserInput,
     WorkflowInput,
 )
-from temporal_agent_harness.workflows import AgenticWorkflow
-from temporalio import activity
-from temporalio.testing import WorkflowEnvironment
-from temporalio.worker import Worker
+from rho.workflows import AgenticWorkflow
 
 
 async def _wait_for_turn_complete(handle, *, since_seq: int, since_phase: str) -> StateUpdateResponse:
@@ -81,7 +81,7 @@ async def test_agentic_workflow_handler_basics() -> None:
             env.client,
             task_queue="test-agentic",
             workflows=[AgenticWorkflow],
-            activities=[llm_activities.generate_turn_reply],
+            activities=[llm_activities.generate_turn_reply, llm_activities.execute_llm_call],
         ):
             handle = await env.client.start_workflow(
                 AgenticWorkflow.run,
@@ -134,7 +134,7 @@ async def test_get_state_update_blocks_until_state_changes() -> None:
             env.client,
             task_queue="test-agentic-blocking",
             workflows=[AgenticWorkflow],
-            activities=[llm_activities.generate_turn_reply],
+            activities=[llm_activities.generate_turn_reply, llm_activities.execute_llm_call],
         ):
             handle = await env.client.start_workflow(
                 AgenticWorkflow.run,
@@ -168,17 +168,21 @@ async def test_get_state_update_blocks_until_state_changes() -> None:
 async def test_turn_completion_waits_for_reply_activity() -> None:
     release_reply = asyncio.Event()
 
-    @activity.defn(name="GenerateTurnReply")
-    async def delayed_turn_reply(input: TurnReplyActivityInput) -> str:
+    @activity.defn(name="ExecuteLLMCall")
+    async def delayed_llm_call(_input: LLMActivityInput) -> LLMActivityOutput:
         await release_reply.wait()
-        return f"Handled {input.turn_id}: {input.message}"
+        return LLMActivityOutput(
+            items=[ConversationItem(type="assistant_message", content="Handled delayed turn")],
+            finish_reason="stop",
+            token_usage=TokenUsage.from_counts(output_tokens=3),
+        )
 
     async with await WorkflowEnvironment.start_time_skipping() as env:
         async with Worker(
             env.client,
             task_queue="test-agentic-delayed",
             workflows=[AgenticWorkflow],
-            activities=[delayed_turn_reply],
+            activities=[delayed_llm_call],
         ):
             handle = await env.client.start_workflow(
                 AgenticWorkflow.run,

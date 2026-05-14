@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from temporal_agent_harness.tools import (
+from rho.tools import (
     RETRY_DEFAULT,
     RETRY_NONE,
     ToolRetryPolicy,

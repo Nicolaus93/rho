@@ -2,20 +2,23 @@ from __future__ import annotations
 
 import json
 
-from temporal_agent_harness.activities import LLMActivities
-from temporal_agent_harness.constants import (
+from temporalio.testing import WorkflowEnvironment
+from temporalio.worker import Worker
+
+from rho.activities import LLMActivities
+from rho.constants import (
     TASK_QUEUE,
     UPDATE_SHUTDOWN,
     UPDATE_START_SESSION,
 )
-from temporal_agent_harness.llm import (
+from rho.llm import (
     CompactRequest,
     CompactResponse,
     LLMRequest,
     LLMResponse,
     MultiProviderLLMClient,
 )
-from temporal_agent_harness.models import (
+from rho.models import (
     ConversationItem,
     HarnessWorkflowInput,
     ShutdownRequest,
@@ -27,14 +30,12 @@ from temporal_agent_harness.models import (
     TurnStatus,
     UserInput,
 )
-from temporal_agent_harness.runtime import rho
-from temporal_agent_harness.workflows import (
+from rho.runtime import rho
+from rho.workflows import (
     AgenticWorkflow,
     HarnessWorkflow,
     SessionWorkflow,
 )
-from temporalio.testing import WorkflowEnvironment
-from temporalio.worker import Worker
 
 
 class _FakeProvider:
@@ -137,7 +138,7 @@ async def test_rho_cli_starts_harness_backed_session(monkeypatch, capsys, tmp_pa
             env.client,
             task_queue=TASK_QUEUE,
             workflows=[AgenticWorkflow, SessionWorkflow, HarnessWorkflow],
-            activities=[llm_activities.generate_turn_reply],
+            activities=[llm_activities.generate_turn_reply, llm_activities.execute_llm_call],
         ):
 
             async def fake_connect_client(host_port_override: str = "", namespace_override: str = ""):
@@ -194,7 +195,7 @@ async def test_rho_interactive_session_prints_replies_in_same_workflow(monkeypat
             env.client,
             task_queue=TASK_QUEUE,
             workflows=[AgenticWorkflow, SessionWorkflow, HarnessWorkflow],
-            activities=[llm_activities.generate_turn_reply],
+            activities=[llm_activities.generate_turn_reply, llm_activities.execute_llm_call],
         ):
 
             async def fake_connect_client(host_port_override: str = "", namespace_override: str = ""):

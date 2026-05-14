@@ -13,6 +13,7 @@ from .models import (
     ConversationItem,
     ToolActivityInput,
     ToolActivityOutput,
+    ToolRetryPolicy,
     ToolSpec,
 )
 
@@ -134,6 +135,20 @@ class ToolsExecutor:
                 return tool_activity_error_to_output(call.call_id, exc)
 
         return await asyncio.gather(*(execute_one(call) for call in calls))
+
+
+__all__ = [
+    "DEFAULT_TOOL_TIMEOUT_MS",
+    "RETRY_DEFAULT",
+    "RETRY_NONE",
+    "ToolRetryPolicy",
+    "ToolSpec",
+    "ToolsExecutor",
+    "build_builtin_tool_specs",
+    "resolve_retry_policy",
+    "resolve_tool_timeout",
+    "tool_activity_error_to_output",
+]
 
 
 def _decode_tool_args(arguments: str) -> dict[str, Any]:

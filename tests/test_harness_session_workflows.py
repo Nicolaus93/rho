@@ -1,23 +1,26 @@
 from __future__ import annotations
 
-from temporal_agent_harness.activities import (
+from temporalio.testing import WorkflowEnvironment
+from temporalio.worker import Worker
+
+from rho.activities import (
     LLMActivities,
     SessionActivities,
     execute_tool,
 )
-from temporal_agent_harness.constants import (
+from rho.constants import (
     UPDATE_SHUTDOWN,
     UPDATE_START_SESSION,
     UPDATE_USER_INPUT,
 )
-from temporal_agent_harness.llm import (
+from rho.llm import (
     CompactRequest,
     CompactResponse,
     LLMRequest,
     LLMResponse,
     MultiProviderLLMClient,
 )
-from temporal_agent_harness.models import (
+from rho.models import (
     ConversationItem,
     HarnessWorkflowInput,
     ShutdownRequest,
@@ -28,13 +31,11 @@ from temporal_agent_harness.models import (
     TokenUsage,
     UserInput,
 )
-from temporal_agent_harness.workflows import (
+from rho.workflows import (
     AgenticWorkflow,
     HarnessWorkflow,
     SessionWorkflow,
 )
-from temporalio.testing import WorkflowEnvironment
-from temporalio.worker import Worker
 
 
 class _FakeProvider:
@@ -65,7 +66,7 @@ async def test_harness_session_orchestration_basics() -> None:
             env.client,
             task_queue="test-harness",
             workflows=[AgenticWorkflow, SessionWorkflow, HarnessWorkflow],
-            activities=[llm_activities.generate_turn_reply],
+            activities=[llm_activities.generate_turn_reply, llm_activities.execute_llm_call],
         ):
             harness = await env.client.start_workflow(
                 HarnessWorkflow.run,
