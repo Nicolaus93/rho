@@ -1,0 +1,6 @@
+__pycache__/
+*.egg-info/
+.venv/
+pyrightconfig.json
+.pytest_cache/
+.git/
