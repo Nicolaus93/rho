@@ -120,6 +120,24 @@ _TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "required": ["process_id"],
         },
     },
+    "delegate_subtask": {
+        "name": "delegate_subtask",
+        "description": "Delegate a self-contained subtask to a bounded child agent and return only the child agent's final answer.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "The full task for the child agent to complete.",
+                },
+                "goal": {
+                    "type": "string",
+                    "description": "Optional success criteria or desired outcome for the delegated task.",
+                },
+            },
+            "required": ["prompt"],
+        },
+    },
 }
 
 

@@ -325,6 +325,7 @@ class ToolsConfig:
             "request_user_input",
         ]
     )
+    max_subcall_depth: int = 1
 
     def has_tool(self, name: str) -> bool:
         return name in self.enabled_tools
@@ -666,6 +667,16 @@ class ToolActivityOutput:
     call_id: str
     content: str
     success: bool | None = None
+
+
+@dataclass
+class SubcallActivityInput:
+    call_id: str
+    prompt: str
+    parent_conversation_id: str
+    depth: int
+    config: SessionConfiguration = field(default_factory=default_session_configuration)
+    task_queue: str = ""
 
 
 @dataclass

@@ -11,6 +11,8 @@ from .models import (
     RETRY_DEFAULT,
     RETRY_NONE,
     ConversationItem,
+    SessionConfiguration,
+    SubcallActivityInput,
     ToolActivityInput,
     ToolActivityOutput,
     ToolRetryPolicy,
@@ -30,6 +32,7 @@ def build_builtin_tool_specs() -> list[ToolSpec]:
         ToolSpec("grep_files", 30_000, RETRY_DEFAULT),
         ToolSpec("exec_command", DEFAULT_TOOL_TIMEOUT_MS, RETRY_NONE),
         ToolSpec("write_stdin", DEFAULT_TOOL_TIMEOUT_MS, RETRY_NONE),
+        ToolSpec("delegate_subtask", DEFAULT_TOOL_TIMEOUT_MS, RETRY_NONE),
     ]
 
 
@@ -87,6 +90,9 @@ class ToolsExecutor:
         task_queue: str = "",
         approval_mode: str = "",
         exec_policy_rules: str = "",
+        conversation_id: str = "",
+        depth: int = 0,
+        session_config: SessionConfiguration | None = None,
     ) -> None:
         self._specs = {spec.name: spec for spec in specs}
         self._cwd = cwd
@@ -95,6 +101,9 @@ class ToolsExecutor:
         self._mcp_tool_lookup: dict[str, dict[str, str]] = {}
         self._approval_mode = approval_mode
         self._exec_policy_rules = exec_policy_rules
+        self._conversation_id = conversation_id
+        self._depth = depth
+        self._session_config = session_config
 
     def with_mcp_context(self, session_id: str, lookup: dict[str, dict[str, str]]) -> "ToolsExecutor":
         self._session_id = session_id
@@ -109,16 +118,30 @@ class ToolsExecutor:
     async def execute_parallel(self, calls: list[ConversationItem]) -> list[ToolActivityOutput]:
         async def execute_one(call: ConversationItem) -> ToolActivityOutput:
             args = _decode_tool_args(call.arguments)
-            activity_input = ToolActivityInput(
-                call_id=call.call_id,
-                tool_name=call.name,
-                arguments=args,
-                cwd=self._cwd,
-                session_id=self._session_id,
-                mcp_tool_ref=self._mcp_tool_lookup.get(call.name),
-                approval_mode=self._approval_mode,
-                exec_policy_rules=self._exec_policy_rules,
-            )
+            activity_name = "ExecuteTool"
+            activity_input: ToolActivityInput | SubcallActivityInput
+            if call.name == "delegate_subtask":
+                prompt = _build_subtask_prompt(args)
+                activity_name = "ExecuteSubcallTool"
+                activity_input = SubcallActivityInput(
+                    call_id=call.call_id,
+                    prompt=prompt,
+                    parent_conversation_id=self._conversation_id,
+                    depth=self._depth,
+                    config=self._session_config or SessionConfiguration(),
+                    task_queue=self._task_queue,
+                )
+            else:
+                activity_input = ToolActivityInput(
+                    call_id=call.call_id,
+                    tool_name=call.name,
+                    arguments=args,
+                    cwd=self._cwd,
+                    session_id=self._session_id,
+                    mcp_tool_ref=self._mcp_tool_lookup.get(call.name),
+                    approval_mode=self._approval_mode,
+                    exec_policy_rules=self._exec_policy_rules,
+                )
             kwargs: dict[str, Any] = {
                 "start_to_close_timeout": resolve_tool_timeout(self._specs, call.name, args),
                 "retry_policy": resolve_retry_policy(self._specs, call.name),
@@ -128,9 +151,7 @@ class ToolsExecutor:
             if self._task_queue:
                 kwargs["task_queue"] = self._task_queue
             try:
-                return await workflow.execute_activity(
-                    "ExecuteTool", activity_input, result_type=ToolActivityOutput, **kwargs
-                )
+                return await workflow.execute_activity(activity_name, activity_input, result_type=ToolActivityOutput, **kwargs)
             except Exception as exc:  # pragma: no cover - exercised in runtime, not unit tests
                 return tool_activity_error_to_output(call.call_id, exc)
 
@@ -161,3 +182,13 @@ def _decode_tool_args(arguments: str) -> dict[str, Any]:
         return value if isinstance(value, dict) else {"_raw": arguments}
     except Exception:
         return {"_raw": arguments}
+
+
+def _build_subtask_prompt(arguments: dict[str, Any]) -> str:
+    prompt = str(arguments.get("prompt") or "").strip()
+    goal = str(arguments.get("goal") or "").strip()
+    if prompt and goal:
+        return f"{prompt}\n\nSuccess criteria:\n{goal}"
+    if prompt:
+        return prompt
+    return goal

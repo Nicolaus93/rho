@@ -36,6 +36,7 @@ from ..models import (
     InterruptRequest,
     InterruptResponse,
     ModelConfig,
+    SessionConfiguration,
     ShutdownRequest,
     ShutdownResponse,
     StateUpdateRequest,
@@ -56,9 +57,11 @@ class AgenticWorkflow:
         self._config_context_window = 0
         self._history: list[ConversationItem] = []
         self._model_config = ModelConfig()
+        self._session_config = SessionConfiguration()
         self._tool_specs: list[ToolSpec] = []
         self._cwd: str = ""
         self._task_queue: str = ""
+        self._depth = 0
         self._pending_turns: list[tuple[str, str]] = []
         self._turn_counter = 0
         self._turns_in_run = 0
@@ -217,6 +220,9 @@ class AgenticWorkflow:
                 specs=list(self._tool_specs),
                 cwd=self._cwd,
                 task_queue=self._task_queue,
+                conversation_id=self._conversation_id,
+                depth=self._depth,
+                session_config=self._session_config,
             )
             for _ in range(20):
                 last_output = cast(
@@ -227,6 +233,9 @@ class AgenticWorkflow:
                             history=[replace(item) for item in self._history],
                             model_config=self._model_config,
                             tool_specs=list(self._tool_specs),
+                            base_instructions=self._session_config.base_instructions,
+                            developer_instructions=self._session_config.developer_instructions,
+                            user_instructions=self._session_config.user_instructions,
                         ),
                         result_type=LLMActivityOutput,
                         start_to_close_timeout=timedelta(seconds=60),
@@ -284,10 +293,14 @@ class AgenticWorkflow:
         self._conversation_id = input.conversation_id
         self._config_context_window = input.config.model.context_window
         self._model_config = input.config.model
+        self._session_config = input.config
         self._cwd = input.config.cwd
         self._task_queue = input.config.session_task_queue
+        self._depth = input.depth
         enabled = set(input.config.tools.enabled_tools)
         self._tool_specs = [s for s in build_builtin_tool_specs() if s.name in enabled]
+        if input.depth >= input.config.tools.max_subcall_depth:
+            self._tool_specs = [s for s in self._tool_specs if s.name != "delegate_subtask"]
         if input.continued_state is not None:
             self._history = [replace(item) for item in input.continued_state.history]
             self._turn_counter = input.continued_state.turn_counter
@@ -303,6 +316,23 @@ class AgenticWorkflow:
                 turn_id, message = self._pending_turns.pop(0)
                 self._current_turn_id = turn_id
                 await self._process_turn(turn_id, message)
+                if input.depth > 0 and not self._pending_turns:
+                    final_message = next(
+                        (
+                            item.content
+                            for item in reversed(self._history)
+                            if item.type == ITEM_TYPE_ASSISTANT_MESSAGE and item.content
+                        ),
+                        "",
+                    )
+                    return WorkflowResult(
+                        conversation_id=self._conversation_id,
+                        total_iterations=self._turns_in_run,
+                        total_tokens=self._total_tokens,
+                        total_cached_tokens=self._total_cached_tokens,
+                        end_reason="subcall_complete",
+                        final_message=final_message,
+                    )
                 if (
                     self._turns_in_run >= input.max_turns_per_run
                     and not self._pending_turns
