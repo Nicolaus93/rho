@@ -176,11 +176,22 @@ class RhoApp(App[None]):
         del header_index, blank_index
 
         streamed = ""
+        loop = asyncio.get_running_loop()
+        redraw_interval = 0.1
+        last_redraw = loop.time()
+        rendered_streamed = ""
         for token in self._iter_stream_tokens(message):
             streamed += token
-            self._replace_log_entry(body_index, Text(streamed))
+            now = loop.time()
+            if now - last_redraw >= redraw_interval:
+                self._replace_log_entry(body_index, Text(streamed))
+                rendered_streamed = streamed
+                last_redraw = now
             if token.strip():
                 await asyncio.sleep(0.035)
+
+        if rendered_streamed != streamed:
+            self._replace_log_entry(body_index, Text(streamed))
 
         self._replace_log_entry(body_index, Markdown(message))
 
