@@ -10,6 +10,7 @@ from temporalio.common import WorkflowIDConflictPolicy, WorkflowIDReusePolicy
 from temporalio.worker import Worker
 
 from ..activities import LLMActivities, SessionActivities, execute_tool
+from ..activities.subcall import SubcallActivities
 from ..client import connect_client, load_client_config
 from ..constants import TASK_QUEUE, UPDATE_SHUTDOWN, UPDATE_START_SESSION
 from ..models import (
@@ -116,9 +117,11 @@ async def _run(args: argparse.Namespace) -> None:
     )
     session_activities = SessionActivities(client)
     llm_activities = LLMActivities()
+    subcall_activities = SubcallActivities(client)
     activity_names = [
         "generate_turn_reply",
         "execute_tool",
+        "execute_subcall_tool",
         "wait_for_session_ready",
         "execute_llm_call",
         "execute_compact",
@@ -139,6 +142,7 @@ async def _run(args: argparse.Namespace) -> None:
         activities=[
             llm_activities.generate_turn_reply,
             execute_tool,
+            subcall_activities.execute_subcall_tool,
             session_activities.wait_for_session_ready,
             llm_activities.execute_llm_call,
             llm_activities.execute_compact,

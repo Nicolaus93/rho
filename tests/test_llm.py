@@ -1,5 +1,6 @@
 from rho.activities import LLMActivities, LLMActivityInput
 from rho.llm import (
+    _tool_specs_to_openai_tools,
     AnthropicClient,
     CompactRequest,
     CompactResponse,
@@ -13,6 +14,7 @@ from rho.models import (
     ConversationItem,
     ModelConfig,
     TokenUsage,
+    ToolSpec,
     TurnReplyActivityInput,
 )
 
@@ -277,3 +279,12 @@ async def test_generate_turn_reply_activity_returns_assistant_message() -> None:
     result = await activities.generate_turn_reply(TurnReplyActivityInput(turn_id="turn-7", message="hello there"))
 
     assert result == "llm reply"
+
+
+def test_delegate_subtask_tool_schema_requires_prompt() -> None:
+    tools = _tool_specs_to_openai_tools([ToolSpec(name="delegate_subtask")])
+
+    assert len(tools) == 1
+    function = tools[0]["function"]
+    assert function["name"] == "delegate_subtask"
+    assert function["parameters"]["required"] == ["prompt"]

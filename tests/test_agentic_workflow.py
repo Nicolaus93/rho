@@ -8,6 +8,8 @@ from temporalio.worker import Worker
 
 from rho.activities import LLMActivities, LLMActivityInput, LLMActivityOutput
 from rho.constants import (
+    ITEM_TYPE_FUNCTION_CALL,
+    ITEM_TYPE_FUNCTION_CALL_OUTPUT,
     PHASE_WAITING_FOR_INPUT,
     UPDATE_GET_STATE_UPDATE,
     UPDATE_INTERRUPT,
@@ -23,12 +25,15 @@ from rho.llm import (
 )
 from rho.models import (
     ConversationItem,
+    FunctionCallOutputPayload,
     InterruptRequest,
     InterruptResponse,
+    SessionConfiguration,
     ShutdownRequest,
     ShutdownResponse,
     StateUpdateRequest,
     StateUpdateResponse,
+    ToolActivityOutput,
     TokenUsage,
     UserInput,
     WorkflowInput,
@@ -202,3 +207,90 @@ async def test_turn_completion_waits_for_reply_activity() -> None:
             release_reply.set()
             delta = await pending_update
             assert any(item.type == "turn_complete" for item in delta.items)
+
+
+async def test_depth_one_workflow_returns_after_single_turn() -> None:
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        llm_activities = _make_llm_activities()
+        async with Worker(
+            env.client,
+            task_queue="test-agentic-depth",
+            workflows=[AgenticWorkflow],
+            activities=[llm_activities.generate_turn_reply, llm_activities.execute_llm_call],
+        ):
+            handle = await env.client.start_workflow(
+                AgenticWorkflow.run,
+                WorkflowInput(conversation_id="agentic-depth-1", user_message="hello", depth=1),
+                id="agentic-depth-1",
+                task_queue="test-agentic-depth",
+            )
+
+            result = await handle.result()
+            assert result.end_reason == "subcall_complete"
+            assert result.final_message == "LLM:hello"
+
+
+async def test_agentic_workflow_routes_delegate_subtask_calls() -> None:
+    @activity.defn(name="ExecuteLLMCall")
+    async def scripted_llm_call(input: LLMActivityInput) -> LLMActivityOutput:
+        has_tool_output = any(item.type == ITEM_TYPE_FUNCTION_CALL_OUTPUT for item in input.history)
+        if not has_tool_output:
+            return LLMActivityOutput(
+                items=[
+                    ConversationItem(
+                        type=ITEM_TYPE_FUNCTION_CALL,
+                        call_id="call-sub-1",
+                        name="delegate_subtask",
+                        arguments='{"prompt":"Investigate this subproblem","goal":"Return one concise answer"}',
+                    )
+                ],
+                finish_reason="tool_call",
+                token_usage=TokenUsage.from_counts(output_tokens=5),
+            )
+        tool_output = next(
+            item.output.content
+            for item in input.history
+            if item.type == ITEM_TYPE_FUNCTION_CALL_OUTPUT and item.output is not None
+        )
+        return LLMActivityOutput(
+            items=[ConversationItem(type="assistant_message", content=f"Parent saw: {tool_output}")],
+            finish_reason="stop",
+            token_usage=TokenUsage.from_counts(output_tokens=4),
+        )
+
+    @activity.defn(name="ExecuteSubcallTool")
+    async def execute_subcall_tool(_input) -> ToolActivityOutput:
+        return ToolActivityOutput(call_id="call-sub-1", content="child result", success=True)
+
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        async with Worker(
+            env.client,
+            task_queue="test-agentic-subcall",
+            workflows=[AgenticWorkflow],
+            activities=[scripted_llm_call, execute_subcall_tool],
+        ):
+            config = SessionConfiguration()
+            config.tools.enabled_tools = ["delegate_subtask"]
+            handle = await env.client.start_workflow(
+                AgenticWorkflow.run,
+                WorkflowInput(conversation_id="agentic-subcall-1", user_message="hello", config=config),
+                id="agentic-subcall-1",
+                task_queue="test-agentic-subcall",
+            )
+            await env.sleep(1)
+
+            items = await handle.query(AgenticWorkflow.get_conversation_items)
+            assert any(item.type == ITEM_TYPE_FUNCTION_CALL and item.name == "delegate_subtask" for item in items)
+            assert any(
+                item.type == ITEM_TYPE_FUNCTION_CALL_OUTPUT
+                and item.output == FunctionCallOutputPayload(content="child result", success=True)
+                for item in items
+            )
+
+            await handle.execute_update(
+                UPDATE_SHUTDOWN,
+                ShutdownRequest(reason="done"),
+                result_type=ShutdownResponse,
+            )
+            result = await handle.result()
+            assert result.final_message == "Parent saw: child result"
