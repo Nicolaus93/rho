@@ -111,10 +111,10 @@ class RhoApp(App[None]):
         self._history_draft = ""
         if not message:
             return
-        self._message_history.append(message)
         if message.lower() in {"exit", "quit", "/exit", "/quit"}:
             await self.action_quit()
             return
+        self._message_history.append(message)
         self._append_log_entry(Text.assemble(("You  ", "bold cyan"), message, "\n"))
         event.input.disabled = True
         self._send_message(message)  # type: ignore[unused-coroutine]
