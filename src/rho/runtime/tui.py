@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import re
+
 from rich.markdown import Markdown
 from rich.text import Text
 from temporalio.client import Client
+from textual import events
 from textual import work
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Input, RichLog, Static
@@ -84,6 +88,10 @@ class RhoApp(App[None]):
         self._workflow_id = workflow_id
         self._since_seq = 0
         self._since_phase = ""
+        self._message_history: list[str] = []
+        self._history_index: int | None = None
+        self._history_draft = ""
+        self._log_entries: list[object] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -99,21 +107,101 @@ class RhoApp(App[None]):
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         message = event.value.strip()
         event.input.clear()
+        self._history_index = None
+        self._history_draft = ""
         if not message:
             return
         if message.lower() in {"exit", "quit", "/exit", "/quit"}:
             await self.action_quit()
             return
-        log = self.query_one(RichLog)
-        log.write(Text.assemble(("You  ", "bold cyan"), message, "\n"))
+        self._message_history.append(message)
+        self._append_log_entry(Text.assemble(("You  ", "bold cyan"), message, "\n"))
         event.input.disabled = True
         self._send_message(message)  # type: ignore[unused-coroutine]
+
+    async def on_key(self, event: events.Key) -> None:
+        if event.key not in {"up", "down"}:
+            return
+        inp = self.query_one(Input)
+        if self.focused is not inp or inp.disabled or not self._message_history:
+            return
+        if event.key == "up":
+            self._show_previous_message(inp)
+        else:
+            self._show_next_message(inp)
+        event.stop()
+
+    def _show_previous_message(self, inp: Input) -> None:
+        if self._history_index is None:
+            self._history_draft = inp.value
+            self._history_index = len(self._message_history) - 1
+        elif self._history_index > 0:
+            self._history_index -= 1
+        self._set_input_value(inp, self._message_history[self._history_index])
+
+    def _show_next_message(self, inp: Input) -> None:
+        if self._history_index is None:
+            return
+        next_index = self._history_index + 1
+        if next_index >= len(self._message_history):
+            self._history_index = None
+            self._set_input_value(inp, self._history_draft)
+            return
+        self._history_index = next_index
+        self._set_input_value(inp, self._message_history[self._history_index])
+
+    def _set_input_value(self, inp: Input, value: str) -> None:
+        inp.value = value
+        inp.cursor_position = len(value)
+
+    def _append_log_entry(self, renderable: object) -> int:
+        self._log_entries.append(renderable)
+        self._render_log()
+        return len(self._log_entries) - 1
+
+    def _replace_log_entry(self, index: int, renderable: object) -> None:
+        self._log_entries[index] = renderable
+        self._render_log()
+
+    def _render_log(self) -> None:
+        log = self.query_one(RichLog)
+        log.clear()
+        for entry in self._log_entries:
+            log.write(entry)
+
+    async def _stream_assistant_reply(self, message: str) -> None:
+        header_index = self._append_log_entry(Text.assemble(("Assistant  ", "bold green")))
+        body_index = self._append_log_entry(Text(""))
+        blank_index = self._append_log_entry("")
+        del header_index, blank_index
+
+        streamed = ""
+        loop = asyncio.get_running_loop()
+        redraw_interval = 0.1
+        last_redraw = loop.time()
+        rendered_streamed = ""
+        for token in self._iter_stream_tokens(message):
+            streamed += token
+            now = loop.time()
+            if now - last_redraw >= redraw_interval:
+                self._replace_log_entry(body_index, Text(streamed))
+                rendered_streamed = streamed
+                last_redraw = now
+            if token.strip():
+                await asyncio.sleep(0.035)
+
+        if rendered_streamed != streamed:
+            self._replace_log_entry(body_index, Text(streamed))
+
+        self._replace_log_entry(body_index, Markdown(message))
+
+    def _iter_stream_tokens(self, message: str) -> list[str]:
+        return re.findall(r"\S+\s*|\s+", message)
 
     @work
     async def _send_message(self, message: str) -> None:
         handle = self._client.get_workflow_handle(self._workflow_id)
         status_bar = self.query_one(StatusBar)
-        log = self.query_one(RichLog)
         try:
             update = await handle.execute_update(
                 UPDATE_USER_INPUT,
@@ -139,21 +227,19 @@ class RhoApp(App[None]):
                     if item.type == ITEM_TYPE_ASSISTANT_MESSAGE and item.content:
                         assistant_buf.append(item.content)
                     elif item.type == ITEM_TYPE_FUNCTION_CALL:
-                        log.write(Text.from_markup(f"[dim]  ⚙  {item.name}[/dim]"))
+                        self._append_log_entry(Text.from_markup(f"[dim]  ⚙  {item.name}[/dim]"))
                     elif item.type == ITEM_TYPE_FUNCTION_CALL_OUTPUT and item.output:
                         if item.output.success is False:
-                            log.write(Text.from_markup("[dim red]  ✗  error[/dim red]"))
+                            self._append_log_entry(Text.from_markup("[dim red]  ✗  error[/dim red]"))
                     elif item.type == ITEM_TYPE_TURN_COMPLETE:
                         turn_completed = True
                 if turn_completed or delta.completed:
                     break
             if assistant_buf:
                 combined = "\n\n".join(assistant_buf)
-                log.write(Text.assemble(("Assistant  ", "bold green")))
-                log.write(Markdown(combined))
-                log.write("")
+                await self._stream_assistant_reply(combined)
         except Exception as exc:
-            log.write(Text.from_markup(f"[bold red]Error:[/bold red] {exc}"))
+            self._append_log_entry(Text.from_markup(f"[bold red]Error:[/bold red] {exc}"))
         finally:
             inp = self.query_one(Input)
             inp.disabled = False
